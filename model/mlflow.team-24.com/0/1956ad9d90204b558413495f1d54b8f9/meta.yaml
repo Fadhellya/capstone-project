@@ -1,0 +1,14 @@
+artifact_uri: file:c:/Users/valdi/Documents/PERSONAL/Data_Sciences/Project/Deploycamp_CAPSTONE/capstone-project/model/mlflow.team-24.com/0/1956ad9d90204b558413495f1d54b8f9/artifacts
+end_time: 1754066113359
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 1956ad9d90204b558413495f1d54b8f9
+run_name: Logistic Regression Hyperparameter Tuning
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1754066101710
+status: 4
+tags: []
+user_id: valdi
