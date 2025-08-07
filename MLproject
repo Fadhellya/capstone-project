@@ -1,0 +1,9 @@
+name: fraud-detection-project
+
+# Mendefinisikan lingkungan conda yang akan digunakan
+conda_env: conda.yaml
+
+# Mendefinisikan entry point atau perintah yang bisa dijalankan
+entry_points:
+  main:
+    command: "python model/train.py"
