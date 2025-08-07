@@ -1,0 +1,210 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------
+  # Reverse Proxy (Satu-satunya Pintu Masuk)
+  # --------------------------------------------------------------------
+  traefik:
+    image: "traefik:v2.9"
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=muhamadfadhel50@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "8080:8080"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - mlops_network
+
+  # --------------------------------------------------------------------
+  # Services Aplikasi
+  # --------------------------------------------------------------------
+  db:
+    image: postgres:13
+    container_name: mlflow_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-mlflow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mlflow}
+      - POSTGRES_DB=${POSTGRES_DB:-mlflow}
+    volumes:
+      - mlflow_db_data:/var/lib/postgresql/data
+    networks:
+      - mlops_network
+
+  minio:
+    image: minio/minio
+    container_name: mlflow_minio
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - mlflow_minio_data:/data
+    networks:
+      - mlops_network
+    labels:
+      - "traefik.enable=true"
+      # Aturan untuk mengakses Minio Console (UI) via HTTP
+      - "traefik.http.routers.minio.rule=Host(`minio.team-24.com`)"
+      - "traefik.http.services.minio.loadbalancer.server.port=9001"
+
+  mlflow_server:
+    build: ./mlflow_server
+    container_name: mlflow_server
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@db:5432/${POSTGRES_DB:-mlflow}
+      --default-artifact-root s3://mlflow/
+      --host 0.0.0.0
+      --port 5001
+    environment:
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    depends_on:
+      - db
+      - minio
+    networks:
+      - mlops_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mlflow.rule=Host(`mlflow.team-24.com`)"
+      - "traefik.http.routers.mlflow.entrypoints=websecure"
+      - "traefik.http.routers.mlflow.tls.certresolver=myresolver"
+      - "traefik.http.services.mlflow.loadbalancer.server.port=5001"
+
+  fastapi_app:
+    build: ./app
+    container_name: fastapi_app
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+    depends_on:
+      - mlflow_server
+    networks:
+      - mlops_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`api.team-24.com`)"
+      - "traefik.http.routers.fastapi.entrypoints=websecure"
+      - "traefik.http.routers.fastapi.tls.certresolver=myresolver"
+      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+
+  model_trainer:
+    container_name: model_trainer
+    build:
+      context: ./model
+      dockerfile: Dockerfile
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    depends_on:
+      - db
+      - minio
+    networks:
+      - mlops_network
+    # --- PENYESUAIAN PENTING DI SINI ---
+    # Mount folder 'data' agar skrip train.py bisa membaca file CSV
+    volumes:
+      - ./data:/app/data
+
+  prometheus_server:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus_server
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - fastapi_app
+    networks:
+      - mlops_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.team-24.com`)"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls.certresolver=myresolver"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  grafana_server:
+    image: grafana/grafana:9.5.3
+    container_name: grafana_server
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
+    depends_on:
+      - prometheus_server
+    networks:
+      - mlops_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.team-24.com`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: jenkins_server
+    user: "1000:${DOCKER_GROUP_ID}"
+    networks:
+      - mlops_network
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jenkins.rule=Host(`jenkins.team-24.com`)"
+      - "traefik.http.routers.jenkins.entrypoints=websecure"
+      - "traefik.http.routers.jenkins.tls.certresolver=myresolver"
+      - "traefik.http.services.jenkins.loadbalancer.server.port=8080"
+
+  jupyter_lab:
+    image: jupyter/scipy-notebook:latest
+    container_name: jupyter_lab_server
+    volumes:
+      - notebook_data:/home/jovyan/work
+    networks:
+      - mlops_network
+    environment:
+      - JUPYTER_TOKEN=P@ssw0rdteam24
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jupyter.rule=Host(`jupyter.team-24.com`)"
+      - "traefik.http.routers.jupyter.entrypoints=websecure"
+      - "traefik.http.routers.jupyter.tls.certresolver=myresolver"
+      - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
+
+# --------------------------------------------------------------------
+# Definisi Jaringan & Volume
+# --------------------------------------------------------------------
+volumes:
+  mlflow_db_data:
+  mlflow_minio_data:
+  prometheus_data:
+  grafana_data:
+  jenkins_data:
+  notebook_data:
+
+networks:
+  mlops_network:
+    driver: bridge
