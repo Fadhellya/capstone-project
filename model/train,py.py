@@ -100,6 +100,7 @@ def main():
 
         # Show best parameters for the model
         best_params = grid_search.best_params_
+        mlflow.log_params(grid_search.best_params_)
         logging.info(f"Logged parameters: {best_params}")
 
         # Train the model with the best parameters
