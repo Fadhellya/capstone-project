@@ -8,6 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
@@ -68,7 +69,7 @@ def main():
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
         # Define parameter grid for RandomForestClassifier
-        param_rf = {'model__n_estimators': [50, 100, 250, 500]
+        param_grid = {'model__n_estimators': [50, 100, 250, 500]
             , 'model__min_samples_leaf': [1, 2, 5]
             , 'model__min_samples_split': [10, 25, 50, 100]
         }
@@ -86,15 +87,29 @@ def main():
             'preporcessor', preprocessor,
             'model', base_model
         ])
-        base_model.fit(X_train, y_train)
+
+        # Hyperparameter tuning with GridSearchCV
+        skf = StratifiedKFold(n_splits=5, shuffle=False)
+        grid_search = GridSearchCV(
+            pipeline, param_grid
+            , cv=skf, scoring="recall"
+        )
+        grid_search.fit(X_train, y_train)
+        # Hyperparameter tuning complete
+        logging.info("Hyperparameter tuning complete.")
+
+        # Show best parameters for the model
+        best_params = grid_search.best_params_
+        logging.info(f"Logged parameters: {best_params}")
+
+        # Train the model with the best parameters
+        model = grid_search.best_estimator_
+        logging.info("Training the model with the best parameters...")
+        model.fit(X_train, y_train)
         logging.info("Model training complete.")
 
         # Make predictions and evaluate
         y_pred = model.predict(X_test)
-
-
-        mlflow.log_params(params)
-        logging.info(f"Logged parameters: {params}")
 
 
         accuracy = accuracy_score(y_test, y_pred)
@@ -104,7 +119,7 @@ def main():
         
         metrics = {
             "accuracy": accuracy,
-            # "precision": precision,
+             "precision": precision,
             "recall": recall,
             "f1_score": f1
         }
