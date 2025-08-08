@@ -134,7 +134,7 @@ def main():
             sk_model=model,
             artifact_path="model",
             signature=signature,
-            registered_model_name="iris-classifier"
+            registered_model_name="fraud_detection_with_random_forest"
         )
         logging.info("Model trained and registered successfully.")
 
