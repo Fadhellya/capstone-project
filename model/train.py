@@ -1,4 +1,3 @@
-import os
 import logging
 import mlflow
 import pandas as pd
@@ -110,7 +109,7 @@ def main():
             'precision_fraud': report['1']['precision'],
             'f1_score_macro': report['macro avg']['f1-score']
         })
-        logging.info(f"Logged metrics: {metrics}")
+        logging.info(f"Logged metrics: {report}")
 
         #automatically determine the input and output schema
         signature = mlflow.models.infer_signature(X_train, model.predict(X_train))
