@@ -121,8 +121,8 @@ def main():
             signature=signature,
             registered_model_name="fraud_detection_model_with_random_forest"
         )
-        
-        print(f"--- Run completed. Run ID: {run.info.run_id} ---")
+
+        logging.info(f"Run completed. Run ID: {run.info.run_id}")
 
 if __name__ == "__main__":
     main()
