@@ -18,7 +18,7 @@ app = FastAPI(title="Fraud Detection API", version="1.0")
 try:
     mlflow.set_tracking_uri("http://mlflow_server:5001")
     model_name = "fraud-detection-model"
-    stage = "Production"
+    stage = "production"
     model = mlflow.pyfunc.load_model(model_uri=f"models:/{model_name}/{stage}")
     print(f"Successfully loaded model '{model_name}' version {model.metadata.version} from stage '{stage}'.")
 except Exception as e:
