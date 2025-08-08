@@ -1,22 +1,17 @@
-FROM python:3.9-slim
+# Gunakan base image yang sudah memiliki Conda (Miniconda)
+FROM continuumio/miniconda3
 
-# Atur direktori kerja di dalam kontainer
+# Atur direktori kerja
 WORKDIR /app
 
-# Salin file dependensi terlebih dahulu
-# (Asumsi Anda punya file conda.yaml di root proyek)
-COPY ../conda.yaml .
+# Salin file environment conda dan skrip training
+COPY conda.yaml .
+COPY train.py .
 
-# Install dependensi menggunakan conda/pip
-# Pertama, install conda
-RUN pip install conda
-RUN conda env create -f conda.yaml --name mlflow-fraud-detection
+# Buat environment conda dari file.
+# Nama environment (mlflow-fraud-detection) diambil dari dalam conda.yaml
+RUN conda env create -f conda.yaml
 
-# Aktifkan environment conda
-SHELL ["conda", "run", "-n", "mlflow-fraud-detection", "/bin/bash", "-c"]
-
-# Salin skrip training Anda
-COPY . .
-
-# Perintah default saat kontainer dijalankan
-CMD ["python", "train.py"]
+# Perintah default untuk menjalankan training.
+# Panggil python dari dalam environment yang baru dibuat secara eksplisit.
+CMD ["/opt/conda/envs/mlflow-fraud-detection/bin/python", "train.py"]

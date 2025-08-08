@@ -1,0 +1,14 @@
+name: mlflow-fraud-detection
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+    - mlflow>=2.3
+    - pandas
+    - scikit-learn
+    - matplotlib
+    - seaborn
+    - imbalanced-learn
+    - boto3

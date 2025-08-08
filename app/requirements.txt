@@ -3,3 +3,4 @@ uvicorn
 pandas
 mlflow>=2.3
 scikit-learn
+boto3

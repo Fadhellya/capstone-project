@@ -17,7 +17,7 @@ from sklearn.metrics import classification_report
 def main():
     # 1. Load and Prepare Data
     print("--- Loading and preparing data ---")
-    raw = pd.read_csv('../data/fraud_detection.csv')
+    raw = pd.read_csv('data/fraud_detection.csv')
     raw = raw.drop('transaction_id', axis=1)
 
     categorical_features = ['merchant_type', 'device_type']

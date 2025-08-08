@@ -54,7 +54,6 @@ services:
       - mlops_network
     labels:
       - "traefik.enable=true"
-      # Aturan untuk mengakses Minio Console (UI) via HTTP
       - "traefik.http.routers.minio.rule=Host(`minio.team-24.com`)"
       - "traefik.http.services.minio.loadbalancer.server.port=9001"
 
@@ -88,6 +87,9 @@ services:
     container_name: fastapi_app
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     depends_on:
       - mlflow_server
     networks:
