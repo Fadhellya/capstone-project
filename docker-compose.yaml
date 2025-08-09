@@ -162,8 +162,9 @@ services:
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
   jenkins:
-    image: jenkins/jenkins:lts-jdk17
+    build: ./jenkins
     container_name: jenkins_server
+    restart: unless-stopped
     user: "1000:${DOCKER_GROUP_ID}"
     networks:
       - mlops_network
