@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 import mlflow
 import mlflow.sklearn
@@ -16,20 +15,9 @@ from sklearn.compose import ColumnTransformer
 from sklearn.metrics import classification_report
 
 def main():
-    # --- PENYESUAIAN PENTING DI SINI ---
-    # Path ini adalah path RELATIF di dalam kontainer,
-    # karena direktori kerja kita adalah /app dan data di-mount ke /app/data.
-    data_path = "data/fraud_detection.csv"
-
     # 1. Load and Prepare Data
-    print(f"--- Loading and preparing data from '{data_path}' ---")
-    try:
-        raw = pd.read_csv(data_path)
-    except FileNotFoundError:
-        print(f"FATAL ERROR: Data file not found at '{data_path}'.")
-        print("Please ensure the volume mount in docker-compose.yaml is correct.")
-        exit(1) # Keluar dari skrip jika data tidak ditemukan
-
+    print("--- Loading and preparing data ---")
+    raw = pd.read_csv('${WORKSPACE}/data/fraud_detection.csv')
     raw = raw.drop('transaction_id', axis=1)
 
     categorical_features = ['merchant_type', 'device_type']
@@ -98,11 +86,10 @@ def main():
         mlflow.sklearn.log_model(
             sk_model=best_model,
             artifact_path="model",
-            registered_model_name="fraud-detection-model"
+            registered_model_name="fraud-detection-model" # <-- This registers the model!
         )
         
         print(f"--- Run completed. Run ID: {run.info.run_id} ---")
 
 if __name__ == "__main__":
     main()
-
