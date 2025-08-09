@@ -22,16 +22,17 @@ pipeline {
 
         stage('Build and Run Retraining') {
             steps {
-                echo "Memulai proses build dan training ulang untuk proyek '${COMPOSE_PROJECT_NAME}'..."
-                
-                // --- PERINTAH YANG DIPERBAIKI ---
-                // Kita mendefinisikan variabel DATA_DIR dengan path absolut dari workspace Jenkins,
-                // lalu menjalankannya dalam satu blok 'sh'.
-                sh '''
-                    export DATA_DIR=${WORKSPACE}/data
-                    echo "Data directory path is set to: ${DATA_DIR}"
-                    docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer
-                '''
+                // --- PERBAIKAN PENTING DI SINI ---
+                // Gunakan 'withEnv' untuk mengatur variabel lingkungan secara andal
+                // untuk langkah-langkah di dalamnya.
+                withEnv(["DATA_DIR=${env.WORKSPACE}/data"]) {
+                    echo "Memulai proses build dan training ulang..."
+                    echo "DATA_DIR is set to: ${env.DATA_DIR}"
+                    
+                    // Jalankan docker compose. Ia akan secara otomatis menggunakan
+                    // variabel DATA_DIR yang baru saja kita atur.
+                    sh 'docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer'
+                }
             }
         }
     }
@@ -42,4 +43,3 @@ pipeline {
         }
     }
 }
-
