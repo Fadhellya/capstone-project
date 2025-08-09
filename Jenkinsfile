@@ -19,24 +19,14 @@ pipeline {
             }
         }
 
-        // Tahap 2: Membangun ulang image Docker untuk trainer
-        // Ini memastikan jika ada perubahan pada Dockerfile atau skrip,
-        // image yang digunakan selalu yang terbaru.
-        stage('Build Trainer Image') {
+        // Tahap 2: Membangun Image dan Menjalankan Training
+        // Perintah 'run' akan secara otomatis membangun image jika ada perubahan.
+        stage('Build and Run Retraining') {
             steps {
-                echo 'Membangun ulang image untuk model_trainer...'
-                // Menjalankan perintah build dari docker-compose
-                sh 'docker-compose build model_trainer'
-            }
-        }
-
-        // Tahap 3: Menjalankan proses training
-        stage('Run Model Retraining') {
-            steps {
-                echo 'Memulai proses training ulang model...'
-                // Menjalankan service model_trainer sebagai one-off task.
-                // Output dari training akan muncul di log Jenkins.
-                sh 'docker-compose run --rm model_trainer'
+                echo 'Memulai proses build dan training ulang model...'
+                // Menggunakan 'docker compose' (dengan spasi) yang merupakan sintaks modern.
+                // Perintah ini akan membangun image jika perlu, lalu menjalankan training.
+                sh 'docker compose run --build --rm model_trainer'
             }
         }
     }
