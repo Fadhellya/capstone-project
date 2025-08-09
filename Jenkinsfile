@@ -1,14 +1,13 @@
 // Jenkinsfile (Declarative Pipeline)
 
 pipeline {
-    // Jalankan pipeline ini di dalam sebuah kontainer Docker sementara.
+    // --- PERUBAHAN PENTING DI SINI ---
+    // Memberitahu Jenkins untuk membangun dan menggunakan Dockerfile dari folder 'jenkins'
+    // sebagai agent untuk menjalankan pipeline ini.
     agent {
-        docker {
-            // Gunakan image yang sudah memiliki 'docker compose'
-            image 'docker/compose:latest'
-            
-            // Mount docker.sock dan workspace Jenkins
-            args '-v /var/run/docker.sock:/var/run/docker.sock -v ${WORKSPACE}:${WORKSPACE}'
+        dockerfile {
+            dir 'jenkins'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
@@ -26,7 +25,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                // Langkah ini sekarang berjalan di dalam kontainer agent
+                // Langkah ini sekarang berjalan di dalam kontainer agent yang baru dibangun
                 checkout scm
             }
         }
@@ -36,9 +35,7 @@ pipeline {
                 echo "Workspace is at: ${env.WORKSPACE}"
                 echo "Running docker compose for project '${env.COMPOSE_PROJECT_NAME}'..."
                 
-                // --- PERINTAH YANG DIPERBAIKI ---
-                // Pisahkan perintah build dan run menjadi dua langkah terpisah
-                // untuk kompatibilitas yang lebih baik.
+                // Pisahkan perintah build dan run untuk kompatibilitas yang lebih baik.
                 echo "Building the model trainer image..."
                 sh 'docker compose build model_trainer'
                 
