@@ -7,6 +7,7 @@ WORKDIR /app
 # Salin file environment conda dan skrip training
 COPY conda.yaml .
 COPY train.py .
+COPY /data/fraud_detection.csv .
 
 # Buat environment conda dari file.
 # Nama environment (mlflow-fraud-detection) diambil dari dalam conda.yaml
