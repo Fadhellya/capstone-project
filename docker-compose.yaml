@@ -120,7 +120,6 @@ services:
     # Mount folder 'data' agar skrip train.py bisa membaca file CSV
     volumes:
       - ${WORKSPACE}/data:/app/data
-
   prometheus_server:
     image: prom/prometheus:v2.45.0
     container_name: prometheus_server
