@@ -119,7 +119,7 @@ services:
     # --- PENYESUAIAN PENTING DI SINI ---
     # Mount folder 'data' agar skrip train.py bisa membaca file CSV
     volumes:
-      - ./data:/app/data
+      - ${WORKSPACE}/data:/app/data
 
   prometheus_server:
     image: prom/prometheus:v2.45.0
