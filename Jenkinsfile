@@ -1,7 +1,19 @@
 // Jenkinsfile (Declarative Pipeline)
 
 pipeline {
-    agent any
+    // Jalankan pipeline ini di dalam sebuah kontainer Docker sementara.
+    agent {
+        docker {
+            // Gunakan image yang sudah memiliki 'docker compose'
+            image 'docker/compose:latest'
+            
+            // Ini adalah bagian paling penting:
+            // 1. Mount docker.sock agar bisa menjalankan perintah docker.
+            // 2. Mount workspace Jenkins dari host ke dalam kontainer agent
+            //    di path yang SAMA. Ini menyelesaikan masalah path.
+            args '-v /var/run/docker.sock:/var/run/docker.sock -v ${WORKSPACE}:${WORKSPACE}'
+        }
+    }
 
     options {
         timeout(time: 30, unit: 'MINUTES')
@@ -16,23 +28,20 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
+                // Langkah ini sekarang berjalan di dalam kontainer agent
                 checkout scm
             }
         }
 
         stage('Build and Run Retraining') {
             steps {
-                // --- PERBAIKAN PENTING DI SINI ---
-                // Gunakan 'withEnv' untuk mengatur variabel lingkungan secara andal
-                // untuk langkah-langkah di dalamnya.
-                withEnv(["DATA_DIR=${env.WORKSPACE}/data"]) {
-                    echo "Memulai proses build dan training ulang..."
-                    echo "DATA_DIR is set to: ${env.DATA_DIR}"
-                    
-                    // Jalankan docker compose. Ia akan secara otomatis menggunakan
-                    // variabel DATA_DIR yang baru saja kita atur.
-                    sh 'docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer'
-                }
+                echo "Workspace is at: ${env.WORKSPACE}"
+                echo "Running docker compose from inside a docker agent..."
+                
+                // Perintah ini sekarang akan bekerja karena path './data' di docker-compose.yaml
+                // akan diresolusi dengan benar relatif terhadap workspace,
+                // yang mana path-nya sama di host dan di agent.
+                sh 'docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer'
             }
         }
     }
