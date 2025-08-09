@@ -19,7 +19,7 @@ def main():
     # --- PENYESUAIAN PENTING DI SINI ---
     # Path ini adalah path RELATIF di dalam kontainer,
     # karena direktori kerja kita adalah /app dan data di-mount ke /app/data.
-    data_path = "/var/jenkins_home/workspace/retraining/data/fraud_detection.csv"
+    data_path = "data/fraud_detection.csv"
 
     # 1. Load and Prepare Data
     print(f"--- Loading and preparing data from '{data_path}' ---")
