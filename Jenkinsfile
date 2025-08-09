@@ -37,9 +37,13 @@ pipeline {
                 echo "Running docker compose for project '${env.COMPOSE_PROJECT_NAME}'..."
                 
                 // --- PERINTAH YANG DIPERBAIKI ---
-                // Hapus flag '--project-name'. Docker Compose akan menggunakan
-                // variabel lingkungan COMPOSE_PROJECT_NAME secara otomatis.
-                sh 'docker compose run --build --rm model_trainer'
+                // Pisahkan perintah build dan run menjadi dua langkah terpisah
+                // untuk kompatibilitas yang lebih baik.
+                echo "Building the model trainer image..."
+                sh 'docker compose build model_trainer'
+                
+                echo "Running the model training..."
+                sh 'docker compose run --rm model_trainer'
             }
         }
     }
