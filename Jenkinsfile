@@ -7,10 +7,7 @@ pipeline {
             // Gunakan image yang sudah memiliki 'docker compose'
             image 'docker/compose:latest'
             
-            // Ini adalah bagian paling penting:
-            // 1. Mount docker.sock agar bisa menjalankan perintah docker.
-            // 2. Mount workspace Jenkins dari host ke dalam kontainer agent
-            //    di path yang SAMA. Ini menyelesaikan masalah path.
+            // Mount docker.sock dan workspace Jenkins
             args '-v /var/run/docker.sock:/var/run/docker.sock -v ${WORKSPACE}:${WORKSPACE}'
         }
     }
@@ -22,6 +19,7 @@ pipeline {
     environment {
         // Ganti '988' dengan ID grup Docker Anda jika berbeda.
         DOCKER_GROUP_ID = '988'
+        // Docker Compose akan secara otomatis menggunakan variabel ini sebagai nama proyek.
         COMPOSE_PROJECT_NAME = 'capstone-project'
     }
 
@@ -36,12 +34,12 @@ pipeline {
         stage('Build and Run Retraining') {
             steps {
                 echo "Workspace is at: ${env.WORKSPACE}"
-                echo "Running docker compose from inside a docker agent..."
+                echo "Running docker compose for project '${env.COMPOSE_PROJECT_NAME}'..."
                 
-                // Perintah ini sekarang akan bekerja karena path './data' di docker-compose.yaml
-                // akan diresolusi dengan benar relatif terhadap workspace,
-                // yang mana path-nya sama di host dan di agent.
-                sh 'docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer'
+                // --- PERINTAH YANG DIPERBAIKI ---
+                // Hapus flag '--project-name'. Docker Compose akan menggunakan
+                // variabel lingkungan COMPOSE_PROJECT_NAME secara otomatis.
+                sh 'docker compose run --build --rm model_trainer'
             }
         }
     }
