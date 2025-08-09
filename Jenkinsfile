@@ -28,20 +28,21 @@ pipeline {
             }
         }
 
-        // Tahap 2: Verifikasi file di workspace (untuk debugging)
-        // Tahap ini akan menunjukkan semua file yang ada untuk memastikan data/fraud_detection.csv benar-benar ada.
-        stage('Verify Workspace Files') {
-            steps {
-                echo "Verifying files in workspace: ${pwd()}"
-                sh 'ls -laR'
-            }
-        }
-
-        // Tahap 3: Membangun Image dan Menjalankan Training
+        // Tahap 2: Membangun Image dan Menjalankan Training
         stage('Build and Run Retraining') {
             steps {
                 echo "Memulai proses build dan training ulang untuk proyek '${COMPOSE_PROJECT_NAME}'..."
                 
+                // --- LANGKAH DEBUGGING ---
+                // Mencetak direktori kerja saat ini di dalam workspace Jenkins
+                echo "Current working directory is:"
+                sh 'pwd'
+                
+                // Mencetak daftar file di direktori kerja untuk memastikan folder 'data' ada
+                echo "Files in current directory are:"
+                sh 'ls -la'
+                // --- AKHIR LANGKAH DEBUGGING ---
+
                 // Menjalankan 'run' dengan nama proyek yang benar.
                 // Jenkins sekarang akan terhubung ke jaringan dan service yang sudah ada.
                 sh 'docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer'
@@ -53,7 +54,8 @@ pipeline {
     post {
         // 'always' berarti akan selalu dijalankan, baik pipeline berhasil maupun gagal.
         always {
-            echo 'Pipeline retraining selesai. Menunggu team data science melakukan set model updated.'
+            echo 'Pipeline retraining selesai.'
         }
     }
 }
+
