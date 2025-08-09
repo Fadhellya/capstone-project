@@ -12,7 +12,7 @@ pipeline {
 
     // Mendefinisikan variabel lingkungan untuk pipeline ini
     environment {
-        // Ganti '999' dengan ID grup Docker Anda. Cek dengan 'getent group docker'
+        // Ganti '988' dengan ID grup Docker Anda jika berbeda. Cek dengan 'getent group docker'
         DOCKER_GROUP_ID = '988'
         
         // Menetapkan nama proyek Docker Compose secara eksplisit
@@ -28,7 +28,16 @@ pipeline {
             }
         }
 
-        // Tahap 2: Membangun Image dan Menjalankan Training
+        // Tahap 2: Verifikasi file di workspace (untuk debugging)
+        // Tahap ini akan menunjukkan semua file yang ada untuk memastikan data/fraud_detection.csv benar-benar ada.
+        stage('Verify Workspace Files') {
+            steps {
+                echo "Verifying files in workspace: ${pwd()}"
+                sh 'ls -laR'
+            }
+        }
+
+        // Tahap 3: Membangun Image dan Menjalankan Training
         stage('Build and Run Retraining') {
             steps {
                 echo "Memulai proses build dan training ulang untuk proyek '${COMPOSE_PROJECT_NAME}'..."
@@ -44,7 +53,7 @@ pipeline {
     post {
         // 'always' berarti akan selalu dijalankan, baik pipeline berhasil maupun gagal.
         always {
-            echo 'Pipeline retraining selesai.'
+            echo 'Pipeline retraining selesai. Menunggu team data science melakukan set model updated.'
         }
     }
 }
