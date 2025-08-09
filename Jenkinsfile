@@ -10,6 +10,15 @@ pipeline {
         timeout(time: 30, unit: 'MINUTES')
     }
 
+    // Mendefinisikan variabel lingkungan untuk pipeline ini
+    environment {
+        // Ganti '999' dengan ID grup Docker Anda. Cek dengan 'getent group docker'
+        DOCKER_GROUP_ID = '988'
+        
+        // Menetapkan nama proyek Docker Compose secara eksplisit
+        COMPOSE_PROJECT_NAME = 'capstone-project'
+    }
+
     stages {
         // Tahap 1: Mengambil kode terbaru dari Git
         stage('Checkout Code') {
@@ -20,13 +29,13 @@ pipeline {
         }
 
         // Tahap 2: Membangun Image dan Menjalankan Training
-        // Perintah 'run' akan secara otomatis membangun image jika ada perubahan.
         stage('Build and Run Retraining') {
             steps {
-                echo 'Memulai proses build dan training ulang model...'
-                // Menggunakan 'docker compose' (dengan spasi) yang merupakan sintaks modern.
-                // Perintah ini akan membangun image jika perlu, lalu menjalankan training.
-                sh 'docker compose run --build --rm model_trainer'
+                echo "Memulai proses build dan training ulang untuk proyek '${COMPOSE_PROJECT_NAME}'..."
+                
+                // Menjalankan 'run' dengan nama proyek yang benar.
+                // Jenkins sekarang akan terhubung ke jaringan dan service yang sudah ada.
+                sh 'docker compose --project-name ${COMPOSE_PROJECT_NAME} run --build --rm model_trainer'
             }
         }
     }
@@ -36,8 +45,6 @@ pipeline {
         // 'always' berarti akan selalu dijalankan, baik pipeline berhasil maupun gagal.
         always {
             echo 'Pipeline retraining selesai.'
-            // Anda bisa menambahkan langkah notifikasi di sini,
-            // misalnya mengirim email atau pesan ke Slack.
         }
     }
 }
