@@ -109,6 +109,12 @@ services:
       - mlops_network
     volumes:
       - ./model_checker:/app
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.modelchecker.rule=Host(`modelchecker.team-24.com`)"
+      - "traefik.http.routers.modelchecker.entrypoints=websecure"
+      - "traefik.http.routers.modelchecker.tls.certresolver=myresolver"
+      - "traefik.http.services.modelchecker.loadbalancer.server.port=8000"
   model_trainer:
     container_name: model_trainer
     build:
