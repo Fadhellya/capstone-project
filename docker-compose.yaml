@@ -106,7 +106,7 @@ services:
     networks:
       - mlops_network
     volumes:
-      - ./scripts:/app/scripts
+      - ${SCRIPTS_DIR:-./scripts}:/app/scripts
   model_trainer:
     container_name: model_trainer
     build:
