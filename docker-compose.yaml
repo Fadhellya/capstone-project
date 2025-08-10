@@ -101,14 +101,14 @@ services:
       - "traefik.http.routers.fastapi.tls.certresolver=myresolver"
       - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
   model_checker:
-  container_name: model_checker
-  build:
-    context: ./model_checker
-    dockerfile: Dockerfile
-  networks:
-    - mlops_network
-  volumes:
-    - ./model_checker:/app
+    container_name: model_checker
+    build:
+      context: ./model_checker
+      dockerfile: Dockerfile
+    networks:
+      - mlops_network
+    volumes:
+      - ./model_checker:/app
   model_trainer:
     container_name: model_trainer
     build:
