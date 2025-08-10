@@ -8,7 +8,7 @@ MODEL_NAME = "fraud-detection-model"
 MODEL_ALIAS = "production"
 
 # --- PENYESUAIAN PENTING ---
-# Path ini akan kita mount dari Jenkins
+# Path ini sekarang menunjuk ke direktori yang di-mount dari Jenkins workspace
 STATE_DIR = "/state"
 LAST_VERSION_FILE = os.path.join(STATE_DIR, "last_deployed_version.txt")
 
