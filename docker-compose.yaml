@@ -101,12 +101,14 @@ services:
       - "traefik.http.routers.fastapi.tls.certresolver=myresolver"
       - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
   model_checker:
-    image: python:3.9-slim
-    command: python /app/scripts/check_model_version.py
-    networks:
-      - mlops_network
-    volumes:
-      - ${PWD}/scripts:/app/scripts
+  container_name: model_checker
+  build:
+    context: ./model_checker
+    dockerfile: Dockerfile
+  networks:
+    - mlops_network
+  volumes:
+    - ./model_checker:/app
   model_trainer:
     container_name: model_trainer
     build:
