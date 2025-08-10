@@ -106,7 +106,10 @@ services:
     networks:
       - mlops_network
     volumes:
+      # Volume untuk skrip python itu sendiri
       - ${SCRIPTS_DIR:-./scripts}:/app/scripts
+      # Volume untuk menyimpan file state (last_deployed_version.txt)
+      - ${STATE_DIR:-.}/:/state
   model_trainer:
     container_name: model_trainer
     build:
