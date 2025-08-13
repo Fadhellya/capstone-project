@@ -999,3 +999,11 @@ transaction_id,amount,merchant_type,device_type,label
 998,14.71,others,mobile,0
 999,300.05,travel,tablet,0
 1000,59.06,groceries,desktop,0
+1001,150.25,E-commerce,Mobile,0
+1002,25.50,Food,Mobile,0
+1003,500.00,Travel,Web,1
+1004,12.99,Entertainment,Tablet,0
+1005,75.80,Groceries,Mobile,0
+1006,320.10,Electronics,Desktop,0
+1007,45.60,Clothing,Web,0
+1008,199.99,E-commerce,Desktop,0
