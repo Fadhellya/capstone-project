@@ -89,12 +89,9 @@ services:
       - mlops_network
     labels:
       - "traefik.enable=true"
-      # Aturan untuk domain frontend
+      # Aturan untuk domain frontend (tanpa /predict)
       - "traefik.http.routers.frontend.rule=Host(`fraud.team-24.com`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      # Aturan untuk mengarahkan /predict ke backend API
-      - "traefik.http.routers.frontend-api.rule=Host(`fraud.team-24.com`) && PathPrefix(`/predict`)"
-      - "traefik.http.routers.frontend-api.service=fastapi-app-service" # Menunjuk ke service FastAPI
 
   fastapi_app:
     build: ./app
@@ -110,13 +107,18 @@ services:
       - mlops_network
     labels:
       - "traefik.enable=true"
-      # Aturan untuk domain API utama
-      - "traefik.http.routers.fastapi.rule=Host(`api.team-24.com`)"
-      - "traefik.http.routers.fastapi.entrypoints=websecure"
-      - "traefik.http.routers.fastapi.tls.certresolver=myresolver"
-      - "traefik.http.routers.fastapi.service=fastapi-app-service"
-      # Mendefinisikan nama service untuk Traefik
-      - "traefik.http.services.fastapi-app-service.loadbalancer.server.port=8000"
+      # Mendefinisikan service backend sekali saja
+      - "traefik.http.services.fastapi-service.loadbalancer.server.port=8000"
+      
+      # Aturan untuk domain API utama (https://api.team-24.com)
+      - "traefik.http.routers.fastapi-main.rule=Host(`api.team-24.com`)"
+      - "traefik.http.routers.fastapi-main.entrypoints=websecure"
+      - "traefik.http.routers.fastapi-main.tls.certresolver=myresolver"
+      - "traefik.http.routers.fastapi-main.service=fastapi-service"
+      
+      # Aturan untuk path /predict dari domain frontend (http://fraud.team-24.com/predict)
+      - "traefik.http.routers.fastapi-predict.rule=Host(`fraud.team-24.com`) && PathPrefix(`/predict`)"
+      - "traefik.http.routers.fastapi-predict.service=fastapi-service"
 
   model_checker:
     build:
