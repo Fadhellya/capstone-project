@@ -81,7 +81,8 @@ services:
       - "traefik.http.routers.mlflow.entrypoints=websecure"
       - "traefik.http.routers.mlflow.tls.certresolver=myresolver"
       - "traefik.http.services.mlflow.loadbalancer.server.port=5001"
-   frontend_app:
+
+  frontend_app:
     build: ./frontend
     container_name: frontend_app
     networks:
@@ -93,8 +94,8 @@ services:
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
       # Aturan untuk mengarahkan /predict ke backend API
       - "traefik.http.routers.frontend-api.rule=Host(`fraud.team-24.com`) && PathPrefix(`/predict`)"
-      - "traefik.http.routers.frontend-api.service=fastapi-svc" # Menggunakan service FastAPI
-      - "traefik.http.services.fastapi-svc.loadbalancer.server.port=8000"
+      - "traefik.http.routers.frontend-api.service=fastapi-app-service" # Menunjuk ke service FastAPI
+
   fastapi_app:
     build: ./app
     container_name: fastapi_app
@@ -109,30 +110,27 @@ services:
       - mlops_network
     labels:
       - "traefik.enable=true"
+      # Aturan untuk domain API utama
       - "traefik.http.routers.fastapi.rule=Host(`api.team-24.com`)"
       - "traefik.http.routers.fastapi.entrypoints=websecure"
       - "traefik.http.routers.fastapi.tls.certresolver=myresolver"
-      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+      - "traefik.http.routers.fastapi.service=fastapi-app-service"
+      # Mendefinisikan nama service untuk Traefik
+      - "traefik.http.services.fastapi-app-service.loadbalancer.server.port=8000"
+
   model_checker:
-    container_name: model_checker
     build:
       context: ./model_checker
-      dockerfile: Dockerfile
+    container_name: model_checker
     networks:
       - mlops_network
     volumes:
       - ./model_checker:/app
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.modelchecker.rule=Host(`modelchecker.team-24.com`)"
-      - "traefik.http.routers.modelchecker.entrypoints=websecure"
-      - "traefik.http.routers.modelchecker.tls.certresolver=myresolver"
-      - "traefik.http.services.modelchecker.loadbalancer.server.port=8000"
+
   model_trainer:
-    container_name: model_trainer
     build:
       context: ./model
-      dockerfile: Dockerfile
+    container_name: model_trainer
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minioadmin}
@@ -143,10 +141,9 @@ services:
       - minio
     networks:
       - mlops_network
-    # --- PENYESUAIAN PENTING DI SINI ---
-    # Mount folder 'data' agar skrip train.py bisa membaca file CSV
     volumes:
       - ${DATA_DIR:-./data}:/app/data
+
   prometheus_server:
     image: prom/prometheus:v2.45.0
     container_name: prometheus_server
