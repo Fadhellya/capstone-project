@@ -81,7 +81,20 @@ services:
       - "traefik.http.routers.mlflow.entrypoints=websecure"
       - "traefik.http.routers.mlflow.tls.certresolver=myresolver"
       - "traefik.http.services.mlflow.loadbalancer.server.port=5001"
-
+   frontend_app:
+    build: ./frontend
+    container_name: frontend_app
+    networks:
+      - mlops_network
+    labels:
+      - "traefik.enable=true"
+      # Aturan untuk domain frontend
+      - "traefik.http.routers.frontend.rule=Host(`fraud.team-24.com`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      # Aturan untuk mengarahkan /predict ke backend API
+      - "traefik.http.routers.frontend-api.rule=Host(`fraud.team-24.com`) && PathPrefix(`/predict`)"
+      - "traefik.http.routers.frontend-api.service=fastapi-svc" # Menggunakan service FastAPI
+      - "traefik.http.services.fastapi-svc.loadbalancer.server.port=8000"
   fastapi_app:
     build: ./app
     container_name: fastapi_app
