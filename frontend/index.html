@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection Interface</title>
+    <!-- Memuat Tailwind CSS untuk styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Animasi sederhana untuk hasil prediksi */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white h-full flex items-center justify-center font-sans">
+    <div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-lg p-8 space-y-6">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-cyan-400">Fraud Detection System</h1>
+            <p class="text-gray-400 mt-2">Enter transaction details to get a prediction.</p>
+        </div>
+
+        <!-- Form Input -->
+        <form id="prediction-form" class="space-y-4">
+            <div>
+                <label for="amount" class="block text-sm font-medium text-gray-300">Transaction Amount</label>
+                <input type="number" id="amount" name="amount" required
+                       class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"
+                       placeholder="e.g., 150.75">
+            </div>
+            <div>
+                <label for="merchant_type" class="block text-sm font-medium text-gray-300">Merchant Type</label>
+                <select id="merchant_type" name="merchant_type" required
+                        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+                    <option value="E-commerce">E-commerce</option>
+                    <option value="Travel">Travel</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Food">Food</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div>
+                <label for="device_type" class="block text-sm font-medium text-gray-300">Device Type</label>
+                <select id="device_type" name="device_type" required
+                        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+                    <option value="Mobile">Mobile</option>
+                    <option value="Web">Web</option>
+                </select>
+            </div>
+            <button type="submit"
+                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-800 transition-all duration-300">
+                <span id="button-text">Predict</span>
+                <span id="loading-spinner" class="hidden">
+                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+            </button>
+        </form>
+
+        <!-- Hasil Prediksi -->
+        <div id="result-container" class="hidden text-center p-4 rounded-lg">
+            <h2 id="result-label" class="text-2xl font-semibold"></h2>
+            <p class="text-gray-400 text-sm mt-1">Model Version: <span id="model-version"></span></p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('prediction-form');
+        const resultContainer = document.getElementById('result-container');
+        const resultLabel = document.getElementById('result-label');
+        const modelVersion = document.getElementById('model-version');
+        const buttonText = document.getElementById('button-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Tampilkan loading spinner
+            buttonText.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            resultContainer.classList.add('hidden');
+
+            const formData = new FormData(form);
+            const data = {
+                amount: parseFloat(formData.get('amount')),
+                merchant_type: formData.get('merchant_type'),
+                device_type: formData.get('device_type')
+            };
+
+            try {
+                // Ganti dengan URL API Anda jika berbeda
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'An unknown error occurred.');
+                }
+
+                const result = await response.json();
+                displayResult(result);
+
+            } catch (error) {
+                displayError(error.message);
+            } finally {
+                // Sembunyikan loading spinner
+                buttonText.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        function displayResult(result) {
+            resultLabel.textContent = result.prediction_label;
+            modelVersion.textContent = result.model_version;
+
+            resultContainer.classList.remove('hidden', 'bg-red-900', 'bg-green-900', 'fade-in');
+            resultLabel.classList.remove('text-red-300', 'text-green-300');
+
+            if (result.prediction === 1) {
+                resultContainer.classList.add('bg-red-900');
+                resultLabel.classList.add('text-red-300');
+            } else {
+                resultContainer.classList.add('bg-green-900');
+                resultLabel.classList.add('text-green-300');
+            }
+            // Tambahkan animasi
+            setTimeout(() => resultContainer.classList.add('fade-in'), 10);
+        }
+
+        function displayError(message) {
+            resultLabel.textContent = `Error: ${message}`;
+            modelVersion.textContent = 'N/A';
+            
+            resultContainer.classList.remove('hidden', 'bg-green-900', 'fade-in');
+            resultLabel.classList.remove('text-green-300');
+
+            resultContainer.classList.add('bg-red-900');
+            resultLabel.classList.add('text-red-300');
+            setTimeout(() => resultContainer.classList.add('fade-in'), 10);
+        }
+    </script>
+</body>
+</html>
