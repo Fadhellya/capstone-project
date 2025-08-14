@@ -64,13 +64,12 @@ def main():
     # Configure connection to the MLflow Tracking Server
     mlflow.set_tracking_uri("http://mlflow_server:5001")
 
-
     # Set the experiment name in the MLflow UI
     mlflow.set_experiment("fraud_detection_experiment")
 
     # Start an MLflow run
     # Ini buat inisiasi run baru dalam sebuah eksperimen
-    with mlflow.start_run() as run:
+    with mlflow.start_run(run_name="fraud_detection_model training") as run:
         run_id = run.info.run_id
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
@@ -86,7 +85,7 @@ def main():
         preprocessor = ColumnTransformer(
             [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_features)],
             remainder='passthrough'
-        ) #OnneHotEncoder is used to handle categorical features
+        ) #OneHotEncoder is used to handle categorical features
 
         # Create the full pipeline
         pipeline = Pipeline([
@@ -118,12 +117,11 @@ def main():
         # Make predictions and evaluate
         y_pred = model.predict(X_test)
 
-
+        # Log the metrics
         accuracy = accuracy_score(y_test, y_pred)
         precision = precision_score(y_test, y_pred, average='weighted')
         recall = recall_score(y_test, y_pred, average='weighted')
         f1 = f1_score(y_test, y_pred, average='weighted')
-        
         metrics = {
             "accuracy": accuracy,
             "precision": precision,
