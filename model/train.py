@@ -16,13 +16,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Configure connection to the MLflow Tracking Server
-mlflow.set_tracking_uri("http://mlflow_server:5001")
-
-
-# Set the experiment name in the MLflow UI
-mlflow.set_experiment("fraud_detection_experiment")
-
 def main():
     """Main function to train, evaluate, and log the model."""
     logging.info("Starting the training process...")
@@ -67,6 +60,13 @@ def main():
         logging.info("Resampling completed using SMOTENC.")
     else:
         logging.info("No significant class imbalance detected. Proceeding without resampling.")
+
+    # Configure connection to the MLflow Tracking Server
+    mlflow.set_tracking_uri("http://mlflow_server:5001")
+
+
+    # Set the experiment name in the MLflow UI
+    mlflow.set_experiment("fraud_detection_experiment")
 
     # Start an MLflow run
     # Ini buat inisiasi run baru dalam sebuah eksperimen
