@@ -1,10 +1,9 @@
 
-import os
 import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-from sklearn.ensemble import RandomForestClassifier
+from lightgbm import LGBMClassifier 
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -18,16 +17,11 @@ logging.basicConfig(
 )
 
 # Configure connection to the MLflow Tracking Server
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+mlflow.set_tracking_uri("http://mlflow_server:5001")
 
-# Configure connection to S3/MinIO for artifact storage
-os.environ['AWS_ACCESS_KEY_ID'] = os.getenv("AWS_ACCESS_KEY_ID")
-os.environ['AWS_SECRET_ACCESS_KEY'] = os.getenv("AWS_SECRET_ACCESS_KEY")
-os.environ['MLFLOW_S3_ENDPOINT_URL'] = os.getenv("MLFLOW_S3_ENDPOINT_URL")
 
 # Set the experiment name in the MLflow UI
-mlflow.set_experiment("iris_classification")
+mlflow.set_experiment("fraud_detection_experiment")
 
 def main():
     """Main function to train, evaluate, and log the model."""
@@ -69,12 +63,12 @@ def main():
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
         # Define parameter grid for RandomForestClassifier
-        param_grid = {'model__n_estimators': [50, 100, 250, 500]
-            , 'model__min_samples_leaf': [1, 2, 5]
-            , 'model__min_samples_split': [10, 25, 50, 100]
+        param_grid = {'model__boosting_type': [50, 100, 250, 500]
+            , 'model__n_estimators': [1, 2, 5]
+            , 'model__num_leaves': [10, 25, 50, 100]
         }
         
-        base_model = RandomForestClassifier(random_state=42)
+        base_model = LGBMClassifier(random_state=42)
 
         # Define the preprocessing pipeline
         preprocessor = ColumnTransformer(
@@ -84,8 +78,8 @@ def main():
 
         # Create the full pipeline
         pipeline = Pipeline([
-            'preporcessor', preprocessor,
-            'model', base_model
+            ('preprocessor', preprocessor),
+            ('model', base_model)
         ])
 
         # Hyperparameter tuning with GridSearchCV
@@ -120,7 +114,7 @@ def main():
         
         metrics = {
             "accuracy": accuracy,
-             "precision": precision,
+            "precision": precision,
             "recall": recall,
             "f1_score": f1
         }
@@ -135,7 +129,7 @@ def main():
             sk_model=model,
             artifact_path="model",
             signature=signature,
-            registered_model_name="fraud_detection_with_random_forest"
+            registered_model_name="fraud_detection_with_lightgbm"
         )
         logging.info("Model trained and registered successfully.")
 
