@@ -69,14 +69,14 @@ def main():
 
     # Start an MLflow run
     # Ini buat inisiasi run baru dalam sebuah eksperimen
-    with mlflow.start_run(run_name="fraud_detection_model training") as run:
+    with mlflow.start_run(run_name="fraud_detection_model_training") as run:
         run_id = run.info.run_id
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
-        # Define parameter grid for RandomForestClassifier
-        param_grid = {'model__boosting_type': [50, 100, 250, 500]
-            , 'model__n_estimators': [1, 2, 5]
-            , 'model__num_leaves': [10, 25, 50, 100]
+        # Define parameter grid for LightGBMClassifier
+        param_grid = {'model__boosting_type': ['gbdt', 'dart', 'rf']
+            , 'model__n_estimators': [50, 100, 250, 500]
+            , 'model__num_leaves': [8, 32, 64, 128]
         }
         
         base_model = LGBMClassifier(random_state=42)
