@@ -89,7 +89,6 @@ services:
       - mlops_network
     labels:
       - "traefik.enable=true"
-      # Aturan ini sekarang akan menangani halaman utama (root path) dengan benar
       - "traefik.http.routers.frontend.rule=Host(`fraud.team-24.com`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
 
@@ -107,17 +106,11 @@ services:
       - mlops_network
     labels:
       - "traefik.enable=true"
-      # Mendefinisikan service backend sekali saja
       - "traefik.http.services.fastapi-service.loadbalancer.server.port=8000"
-      
-      # Aturan untuk domain API utama (https://api.team-24.com)
       - "traefik.http.routers.fastapi-main.rule=Host(`api.team-24.com`)"
       - "traefik.http.routers.fastapi-main.service=fastapi-service"
       - "traefik.http.routers.fastapi-main.entrypoints=websecure"
       - "traefik.http.routers.fastapi-main.tls.certresolver=myresolver"
-      
-      # --- PENYESUAIAN PENTING ---
-      # Aturan ini sekarang hanya menangkap path API spesifik dari domain frontend
       - "traefik.http.routers.fastapi-proxy.rule=Host(`fraud.team-24.com`) && (PathPrefix(`/predict`) || PathPrefix(`/refresh-model`) || PathPrefix(`/status`))"
       - "traefik.http.routers.fastapi-proxy.service=fastapi-service"
       
@@ -177,8 +170,6 @@ services:
       - /dev/disk/:/dev/disk:ro
     networks:
       - mlops_network
-    # Tidak perlu diekspos ke luar, hanya untuk Prometheus
-
   prometheus_node_exporter:
     image: prom/node-exporter:v1.7.0
     container_name: prometheus_node_exporter
