@@ -2,8 +2,8 @@ import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-from sklearn.svm import SVC
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from xgboost import XGBClassifier
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
@@ -40,10 +40,8 @@ def main():
     # Identify categorical features by name for SMOTENC
     categorical_feature_names = [col for col in X_train.columns if X_train[col].dtype == 'object']
     
-    # Identify feature indices for ColumnTransformer
+    # Identify categorical features by index for ColumnTransformer
     categorical_feature_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
-    numerical_feature_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype != 'object']
-
 
     # Check for class imbalance and resample if needed
     imbalance_threshold = 0.4
@@ -63,26 +61,24 @@ def main():
     mlflow.set_tracking_uri("http://mlflow_server:5001")
     mlflow.set_experiment("fraud_detection_experiment")
 
-    with mlflow.start_run(run_name="fraud_detection_svm_training") as run:
+    with mlflow.start_run(run_name="fraud_detection_xgboost_training") as run:
         run_id = run.info.run_id
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
         # --- PENYESUAIAN PENTING ---
-        # Define parameter grid for Support Vector Classifier (SVC)
+        # Define parameter grid for XGBClassifier
         param_grid = {
-            'model__C': [0.1, 1, 10],
-            'model__kernel': ['linear', 'rbf']
+            'model__n_estimators': [100, 200],
+            'model__max_depth': [3, 5],
+            'model__learning_rate': [0.01, 0.1]
         }
         
-        # Use SVC as the base model
-        base_model = SVC(random_state=42, probability=True)
+        # Use XGBClassifier as the base model
+        base_model = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss')
 
         # Define the preprocessing pipeline
         preprocessor = ColumnTransformer(
-            [
-                ('scaler', StandardScaler(), numerical_feature_indices),
-                ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices)
-            ],
+            [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices)],
             remainder='passthrough'
         )
 
