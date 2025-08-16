@@ -3,7 +3,25 @@ global:
 
 # Daftar target yang akan di-scrape oleh Prometheus
 scrape_configs:
-- job_name: 'fastapi_app'
-  # Konfigurasi ini memungkinkan Prometheus menemukan layanan kita di dalam jaringan Docker
-  static_configs:
-  - targets: [ 'fastapi_app:8000' ] # 'fastapi_app' adalah nama service di docker-compose, 8000 adalah port internal
+  # Job 1: Mengambil metrik dari aplikasi FastAPI Anda
+  - job_name: 'fastapi_app'
+    static_configs:
+      - targets: ['fastapi_app:8000']
+
+  # Job 2: Mengambil metrik dari cAdvisor untuk monitoring kontainer
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['prometheus_cadvisor:8080']
+
+  # Job 3: Mengambil metrik dari Node Exporter untuk monitoring host
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['prometheus_node_exporter:9100']
+
+  # Job 4: Mengambil metrik dari Jenkins
+  - job_name: 'jenkins'
+    # Plugin Prometheus di Jenkins secara default mengekspos metrik di /prometheus
+    metrics_path: /prometheus
+    static_configs:
+      # Menargetkan service 'jenkins' di port internalnya (8080)
+      - targets: ['jenkins:8080']
