@@ -19,7 +19,7 @@ def main():
     """Main function to train, evaluate, and log the model."""
     logging.info("Starting the training process...")
 
-    data_path = "data/fraud_detection.csv"
+    data_path = "fraud_detection.csv"
 
     # Load the dataset
     try:
