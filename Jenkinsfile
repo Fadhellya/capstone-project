@@ -45,7 +45,16 @@ pipeline {
     }
 
     post {
+        // --- PERBAIKAN PENTING DI SINI ---
         // Bagian ini akan dijalankan HANYA jika semua tahap di atas berhasil.
+        // Menghapus blok 'steps' yang tidak perlu.
+        success {
+            echo 'Training successful. Triggering model refresh on the API...'
+            // Menjalankan perintah curl dari dalam kontainer sementara yang terhubung
+            // ke jaringan yang sama dengan aplikasi Anda.
+            sh 'docker run --rm --network=capstone-project_mlops_network curlimages/curl:latest -X POST http://fastapi_app:8000/refresh-model'
+        }
+        
         always {
             echo 'Pipeline retraining selesai.'
         }
