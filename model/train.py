@@ -139,7 +139,7 @@ def main():
             sk_model=model,
             artifact_path="model",
             signature=signature,
-            registered_model_name="fraud_detection_with_lightgbm"
+            registered_model_name="fraud-detection-model"
         )
         logging.info("Model trained and registered successfully.")
 
