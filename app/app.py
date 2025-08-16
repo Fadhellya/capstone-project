@@ -75,7 +75,7 @@ def load_model():
         logging.error(f"A general error occurred while loading the model. Error: {e}", exc_info=True)
 
 # --- API Endpoints ---
-@app.get("/", tags=["Health Check"])
+@app.get("/status", tags=["Health Check"]) 
 def read_root():
     """
     Root endpoint that provides status information about the API and the loaded model.
