@@ -1,9 +1,8 @@
-
 import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-from lightgbm import LGBMClassifier 
+from sklearn.ensemble import RandomForestClassifier 
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -74,12 +73,12 @@ def main():
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
         # Define parameter grid for LightGBMClassifier
-        param_grid = {'model__boosting_type': ['gbdt', 'dart', 'rf']
-            , 'model__n_estimators': [50, 100, 250, 500]
-            , 'model__num_leaves': [8, 32, 64, 128]
+        param_grid = {'model__n_estimators': [50, 100, 250, 500]
+            , 'model__min_samples_leaf': [1, 2, 5]
+            , 'model__min_samples_split': [10, 25, 50, 100]
         }
-        
-        base_model = LGBMClassifier(random_state=42)
+
+        base_model = RandomForestClassifier(random_state=42)
 
         # Define the preprocessing pipeline
         preprocessor = ColumnTransformer(
@@ -137,6 +136,7 @@ def main():
         logging.info("Logging model to MLflow Registry...")
         mlflow.sklearn.log_model(
             sk_model=model,
+            params=grid_search.best_params_,
             artifact_path="model",
             signature=signature,
             registered_model_name="fraud-detection-model"
