@@ -165,6 +165,34 @@ services:
       - "traefik.http.routers.prometheus.entrypoints=websecure"
       - "traefik.http.routers.prometheus.tls.certresolver=myresolver"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+  prometheus_cadvisor:
+    image: registry.k8s.io/cadvisor/cadvisor:v0.49.1
+    container_name: prometheus_cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - mlops_network
+    # Tidak perlu diekspos ke luar, hanya untuk Prometheus
+
+  prometheus_node_exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: prometheus_node_exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - mlops_network
 
   grafana_server:
     image: grafana/grafana:9.5.3
