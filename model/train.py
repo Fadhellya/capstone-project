@@ -2,7 +2,7 @@ import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -40,8 +40,10 @@ def main():
     # Identify categorical features by name for SMOTENC
     categorical_feature_names = [col for col in X_train.columns if X_train[col].dtype == 'object']
     
-    # Identify categorical features by index for ColumnTransformer
+    # Identify feature indices for ColumnTransformer
     categorical_feature_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
+    numerical_feature_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype != 'object']
+
 
     # Check for class imbalance and resample if needed
     imbalance_threshold = 0.4
@@ -61,25 +63,25 @@ def main():
     mlflow.set_tracking_uri("http://mlflow_server:5001")
     mlflow.set_experiment("fraud_detection_experiment")
 
-    with mlflow.start_run(run_name="fraud_detection_logreg_training") as run:
+    with mlflow.start_run(run_name="fraud_detection_svm_training") as run:
         run_id = run.info.run_id
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
         # --- PENYESUAIAN PENTING ---
-        # Define parameter grid for LogisticRegression
+        # Define parameter grid for Support Vector Classifier (SVC)
         param_grid = {
-            'model__solver': ['liblinear', 'saga'],
-            'model__C': [0.1, 1.0, 10.0]
+            'model__C': [0.1, 1, 10],
+            'model__kernel': ['linear', 'rbf']
         }
         
-        # Use LogisticRegression as the base model
-        base_model = LogisticRegression(random_state=42)
+        # Use SVC as the base model
+        base_model = SVC(random_state=42, probability=True)
 
         # Define the preprocessing pipeline
         preprocessor = ColumnTransformer(
             [
-                ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices),
-                ('scaler', StandardScaler(), [i for i, col in enumerate(X_train.columns) if X_train[col].dtype != 'object'])
+                ('scaler', StandardScaler(), numerical_feature_indices),
+                ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices)
             ],
             remainder='passthrough'
         )
