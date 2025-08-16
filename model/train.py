@@ -2,8 +2,8 @@ import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-from lightgbm import LGBMClassifier
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
@@ -19,7 +19,7 @@ def main():
     """Main function to train, evaluate, and log the model."""
     logging.info("Starting the training process...")
 
-    data_path = "fraud_detection.csv"
+    data_path = "data/fraud_detection.csv"
 
     # Load the dataset
     try:
@@ -43,7 +43,6 @@ def main():
     # Identify categorical features by index for ColumnTransformer
     categorical_feature_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
 
-
     # Check for class imbalance and resample if needed
     imbalance_threshold = 0.4
     class_counts = y_train.value_counts(normalize=True)
@@ -62,24 +61,26 @@ def main():
     mlflow.set_tracking_uri("http://mlflow_server:5001")
     mlflow.set_experiment("fraud_detection_experiment")
 
-    with mlflow.start_run(run_name="fraud_detection_lgbm_training") as run:
+    with mlflow.start_run(run_name="fraud_detection_logreg_training") as run:
         run_id = run.info.run_id
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
         # --- PENYESUAIAN PENTING ---
-        # Define parameter grid for LightGBMClassifier
+        # Define parameter grid for LogisticRegression
         param_grid = {
-            'model__boosting_type': ['gbdt', 'dart'],
-            'model__n_estimators': [100, 200],
-            'model__num_leaves': [31, 64]
+            'model__solver': ['liblinear', 'saga'],
+            'model__C': [0.1, 1.0, 10.0]
         }
         
-        # Use LGBMClassifier as the base model
-        base_model = LGBMClassifier(random_state=42)
+        # Use LogisticRegression as the base model
+        base_model = LogisticRegression(random_state=42)
 
         # Define the preprocessing pipeline
         preprocessor = ColumnTransformer(
-            [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices)],
+            [
+                ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices),
+                ('scaler', StandardScaler(), [i for i, col in enumerate(X_train.columns) if X_train[col].dtype != 'object'])
+            ],
             remainder='passthrough'
         )
 
