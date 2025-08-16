@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
+from fastapi.middleware.cors import CORSMiddleware # <-- Impor CORS
 
 # --- Basic Configuration ---
 logging.basicConfig(
@@ -26,6 +27,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# --- PENYESUAIAN PENTING: Tambahkan Middleware CORS ---
+# Ini mengizinkan frontend Anda (fraud.team-24.com) untuk berkomunikasi dengan API ini.
+origins = [
+    "http://fraud.team-24.com",
+    "https://fraud.team-24.com",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # --- MLflow and Model Configuration ---
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5001")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -33,7 +50,7 @@ mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 MODEL_NAME = "fraud-detection-model"
 MODEL_ALIAS = "production"
 model = None
-model_version = "N/A" # Variabel baru untuk menyimpan versi model
+model_version = "N/A"
 
 # --- Model Loading on Startup ---
 @app.on_event("startup")
@@ -47,20 +64,11 @@ def load_model():
     logging.info(f"Attempting to load model from URI: {model_uri}")
 
     try:
-        # 1. Muat modelnya
         model = mlflow.pyfunc.load_model(model_uri)
-        
-        # 2. Dapatkan detail versi model secara terpisah menggunakan MlflowClient
         client = MlflowClient()
         model_version_details = client.get_model_version_by_alias(MODEL_NAME, MODEL_ALIAS)
         model_version = model_version_details.version
-        
         logging.info(f"Successfully loaded model '{MODEL_NAME}' version {model_version} with alias '{MODEL_ALIAS}'.")
-
-    except MlflowException as e:
-        model = None
-        model_version = "N/A"
-        logging.error(f"Model not found in MLflow Registry. The application will run without a model. Error: {e}")
     except Exception as e:
         model = None
         model_version = "N/A"
@@ -94,7 +102,6 @@ def predict_fraud(transaction: Transaction):
         input_df = pd.DataFrame([transaction.dict()])
         prediction = model.predict(input_df)
         is_fraud = int(prediction[0])
-
         return {
             "prediction": is_fraud,
             "prediction_label": "Fraud" if is_fraud == 1 else "Not Fraud",
@@ -115,4 +122,3 @@ def refresh_model():
         return {"message": f"Model '{MODEL_NAME}@{MODEL_ALIAS}' version {model_version} reloaded successfully."}
     else:
         raise HTTPException(status_code=500, detail="Failed to reload the model. Check server logs.")
-
