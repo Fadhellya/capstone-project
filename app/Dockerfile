@@ -1,7 +1,12 @@
+# Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
 # Set the working directory in the container
 WORKDIR /app
+
+# --- FIX: Install missing system dependency ---
+# libgomp1 is required by scikit-learn/lightgbm for multi-threading
+RUN apt-get update && apt-get install -y libgomp1
 
 # Copy the requirements file into the container at /app
 COPY requirements.txt .
