@@ -48,7 +48,9 @@ pipeline {
         stage('Refresh API Services') {
             steps {
                 echo "Building the FastAPI image to apply any code changes..."
-                sh 'docker compose build fastapi_app'
+                // Menggunakan 'docker build' langsung untuk memastikan hanya image ini yang dibuat,
+                // tanpa melibatkan service lain dari docker-compose.
+                sh 'docker build -t capstone-project-fastapi_app:latest ./app'
 
                 echo "Restarting the FastAPI container to load the new model..."
                 sh 'docker compose restart fastapi_app'
