@@ -13,3 +13,4 @@ dependencies:
     - imbalanced-learn
     - boto3
     - lightgbm
+    - xgboost
