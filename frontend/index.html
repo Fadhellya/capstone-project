@@ -7,7 +7,7 @@
     <!-- Memuat Tailwind CSS untuk styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Animasi sederhana untuk hasil prediksi */
+        /* Animasi sederhana untuk hasil prediksi dan notifikasi */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -17,11 +17,27 @@
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white h-full flex items-center justify-center font-sans">
+<body class="bg-gray-900 text-white h-full flex items-center justify-center font-sans p-4">
     <div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-lg p-8 space-y-6">
         <div class="text-center">
             <h1 class="text-3xl font-bold text-cyan-400">Fraud Detection System</h1>
             <p class="text-gray-400 mt-2">Enter transaction details to get a prediction.</p>
+        </div>
+
+        <!-- Area Status API -->
+        <div id="status-container" class="bg-gray-700 p-4 rounded-lg text-sm space-y-2">
+            <div class="flex justify-between items-center">
+                <span class="font-semibold text-gray-300">API Status:</span>
+                <span id="api-status" class="px-2 py-1 text-xs font-bold rounded-full bg-gray-600">Checking...</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="font-semibold text-gray-300">Model Status:</span>
+                <span id="model-status" class="text-gray-400">N/A</span>
+            </div>
+             <div class="flex justify-between items-center">
+                <span class="font-semibold text-gray-300">Model Version:</span>
+                <span id="model-version-status" class="text-gray-400">N/A</span>
+            </div>
         </div>
 
         <!-- Form Input -->
@@ -51,10 +67,10 @@
                     <option value="Web">Web</option>
                 </select>
             </div>
-            <button type="submit"
+            <button type="submit" id="predict-button"
                     class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-800 transition-all duration-300">
-                <span id="button-text">Predict</span>
-                <span id="loading-spinner" class="hidden">
+                <span class="button-text">Predict</span>
+                <span class="loading-spinner hidden">
                     <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -63,28 +79,51 @@
             </button>
         </form>
 
-        <!-- Hasil Prediksi -->
+        <!-- Tombol Aksi Tambahan -->
+        <div class="grid grid-cols-2 gap-4">
+             <button id="status-button" class="w-full flex justify-center py-2 px-4 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-800 transition-all duration-300">
+                Check Status
+            </button>
+            <button id="refresh-button" class="w-full flex justify-center py-2 px-4 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-800 transition-all duration-300">
+                Refresh Model
+            </button>
+        </div>
+
+        <!-- Hasil Prediksi & Notifikasi -->
         <div id="result-container" class="hidden text-center p-4 rounded-lg">
             <h2 id="result-label" class="text-2xl font-semibold"></h2>
-            <p class="text-gray-400 text-sm mt-1">Model Version: <span id="model-version"></span></p>
+            <p class="text-gray-400 text-sm mt-1">Model Version: <span id="model-version-result"></span></p>
         </div>
+        <div id="notification-container" class="hidden text-center p-3 rounded-lg text-sm"></div>
     </div>
 
     <script>
+        // Elemen Form
         const form = document.getElementById('prediction-form');
+        const predictButton = document.getElementById('predict-button');
+        
+        // Elemen Hasil Prediksi
         const resultContainer = document.getElementById('result-container');
         const resultLabel = document.getElementById('result-label');
-        const modelVersion = document.getElementById('model-version');
-        const buttonText = document.getElementById('button-text');
-        const loadingSpinner = document.getElementById('loading-spinner');
+        const modelVersionResult = document.getElementById('model-version-result');
+        
+        // Elemen Status
+        const apiStatusSpan = document.getElementById('api-status');
+        const modelStatusSpan = document.getElementById('model-status');
+        const modelVersionStatusSpan = document.getElementById('model-version-status');
 
+        // Elemen Aksi
+        const statusButton = document.getElementById('status-button');
+        const refreshButton = document.getElementById('refresh-button');
+        const notificationContainer = document.getElementById('notification-container');
+
+        // --- Fungsi Utama ---
+
+        // 1. Fungsi Prediksi
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-
-            // Tampilkan loading spinner
-            buttonText.classList.add('hidden');
-            loadingSpinner.classList.remove('hidden');
-            resultContainer.classList.add('hidden');
+            toggleLoading(predictButton, true);
+            hideNotifications();
 
             const formData = new FormData(form);
             const data = {
@@ -94,38 +133,77 @@
             };
 
             try {
-                // Ganti dengan URL API Anda jika berbeda
                 const response = await fetch('/predict', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'An unknown error occurred.');
-                }
-
                 const result = await response.json();
-                displayResult(result);
-
+                if (!response.ok) throw new Error(result.detail || 'Prediction failed.');
+                displayPrediction(result);
             } catch (error) {
                 displayError(error.message);
             } finally {
-                // Sembunyikan loading spinner
-                buttonText.classList.remove('hidden');
-                loadingSpinner.classList.add('hidden');
+                toggleLoading(predictButton, false);
             }
         });
 
-        function displayResult(result) {
-            resultLabel.textContent = result.prediction_label;
-            modelVersion.textContent = result.model_version;
+        // 2. Fungsi Cek Status
+        const checkApiStatus = async () => {
+            hideNotifications();
+            try {
+                const response = await fetch('/');
+                const status = await response.json();
+                if (!response.ok) throw new Error(status.detail || 'Failed to fetch status.');
+                
+                apiStatusSpan.textContent = status.api_status;
+                apiStatusSpan.className = 'px-2 py-1 text-xs font-bold rounded-full bg-green-800 text-green-200';
+                
+                modelStatusSpan.textContent = status.model_status;
+                modelStatusSpan.className = status.model_status === 'ready' ? 'text-green-400' : 'text-red-400';
 
-            resultContainer.classList.remove('hidden', 'bg-red-900', 'bg-green-900', 'fade-in');
-            resultLabel.classList.remove('text-red-300', 'text-green-300');
+                modelVersionStatusSpan.textContent = status.model_version;
+
+            } catch (error) {
+                apiStatusSpan.textContent = 'Error';
+                apiStatusSpan.className = 'px-2 py-1 text-xs font-bold rounded-full bg-red-800 text-red-200';
+                modelStatusSpan.textContent = 'N/A';
+                modelVersionStatusSpan.textContent = 'N/A';
+                showNotification(`Status Check Failed: ${error.message}`, 'error');
+            }
+        };
+
+        // 3. Fungsi Refresh Model
+        const refreshModel = async () => {
+            hideNotifications();
+            try {
+                const response = await fetch('/refresh-model', { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || 'Refresh failed.');
+                showNotification(result.message, 'success');
+                // Setelah refresh, cek status lagi untuk update versi model
+                await checkApiStatus();
+            } catch (error) {
+                showNotification(`Model Refresh Failed: ${error.message}`, 'error');
+            }
+        };
+        
+        // Event Listeners untuk Tombol Aksi
+        statusButton.addEventListener('click', checkApiStatus);
+        refreshButton.addEventListener('click', refreshModel);
+
+        // Cek status saat halaman pertama kali dimuat
+        document.addEventListener('DOMContentLoaded', checkApiStatus);
+
+
+        // --- Fungsi Bantuan UI ---
+
+        function displayPrediction(result) {
+            resultLabel.textContent = result.prediction_label;
+            modelVersionResult.textContent = result.model_version;
+
+            resultContainer.className = 'text-center p-4 rounded-lg'; // Reset classes
+            resultLabel.className = 'text-2xl font-semibold';
 
             if (result.prediction === 1) {
                 resultContainer.classList.add('bg-red-900');
@@ -134,20 +212,45 @@
                 resultContainer.classList.add('bg-green-900');
                 resultLabel.classList.add('text-green-300');
             }
-            // Tambahkan animasi
             setTimeout(() => resultContainer.classList.add('fade-in'), 10);
         }
 
         function displayError(message) {
             resultLabel.textContent = `Error: ${message}`;
-            modelVersion.textContent = 'N/A';
-            
-            resultContainer.classList.remove('hidden', 'bg-green-900', 'fade-in');
-            resultLabel.classList.remove('text-green-300');
-
-            resultContainer.classList.add('bg-red-900');
-            resultLabel.classList.add('text-red-300');
+            modelVersionResult.textContent = 'N/A';
+            resultContainer.className = 'text-center p-4 rounded-lg bg-red-900';
+            resultLabel.className = 'text-2xl font-semibold text-red-300';
             setTimeout(() => resultContainer.classList.add('fade-in'), 10);
+        }
+
+        function showNotification(message, type = 'success') {
+            notificationContainer.textContent = message;
+            notificationContainer.className = 'text-center p-3 rounded-lg text-sm'; // Reset
+            if (type === 'error') {
+                notificationContainer.classList.add('bg-red-900', 'text-red-300');
+            } else {
+                notificationContainer.classList.add('bg-blue-900', 'text-blue-200');
+            }
+            setTimeout(() => notificationContainer.classList.add('fade-in'), 10);
+        }
+
+        function hideNotifications() {
+            resultContainer.classList.add('hidden');
+            notificationContainer.classList.add('hidden');
+        }
+
+        function toggleLoading(button, isLoading) {
+            const text = button.querySelector('.button-text');
+            const spinner = button.querySelector('.loading-spinner');
+            if (isLoading) {
+                text.classList.add('hidden');
+                spinner.classList.remove('hidden');
+                button.disabled = true;
+            } else {
+                text.classList.remove('hidden');
+                spinner.classList.add('hidden');
+                button.disabled = false;
+            }
         }
     </script>
 </body>
