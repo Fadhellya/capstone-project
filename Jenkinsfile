@@ -1,7 +1,6 @@
 // Jenkinsfile (Declarative Pipeline)
 
 pipeline {
-    // --- PERUBAHAN PENTING DI SINI ---
     // Memberitahu Jenkins untuk membangun dan menggunakan Dockerfile dari folder 'jenkins'
     // sebagai agent untuk menjalankan pipeline ini.
     agent {
@@ -46,6 +45,16 @@ pipeline {
     }
 
     post {
+        // Bagian ini akan dijalankan HANYA jika semua tahap di atas berhasil.
+        success {
+            steps {
+                echo 'Training successful. Triggering model refresh on the API...'
+                // Menjalankan perintah curl dari dalam kontainer sementara yang terhubung
+                // ke jaringan yang sama dengan aplikasi Anda.
+                sh 'docker run --rm --network=capstone-project_mlops_network curlimages/curl:latest -X POST http://fastapi_app:8000/refresh-model'
+            }
+        }
+        
         always {
             echo 'Pipeline retraining selesai.'
         }
