@@ -2,7 +2,7 @@ import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier 
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -19,6 +19,9 @@ def main():
     """Main function to train, evaluate, and log the model."""
     logging.info("Starting the training process...")
 
+    # --- IMPORTANT ADJUSTMENT ---
+    # This path is RELATIVE within the container,
+    # because our working directory is /app and the data is mounted to /app/data.
     data_path = "fraud_detection.csv"
 
     # Load the dataset
@@ -27,7 +30,7 @@ def main():
     except FileNotFoundError:
         print(f"FATAL ERROR: Data file not found at '{data_path}'.")
         print("Please ensure the volume mount in docker-compose.yaml is correct.")
-        exit(1)
+        exit(1) # Keluar dari skrip jika data tidak ditemukan
 
     # Split the data
     X = data.drop(columns=['label','transaction_id'])
@@ -37,21 +40,21 @@ def main():
     )
     logging.info("Dataset loaded and split successfully.")
 
-    # Identify categorical features by name for SMOTENC
-    categorical_feature_names = [col for col in X_train.columns if X_train[col].dtype == 'object']
-    
-    # Identify categorical features by index for ColumnTransformer
-    categorical_feature_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
+    # Identify categorical features
+    categorical_features = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
 
     # Check for class imbalance and resample if needed
-    imbalance_threshold = 0.4
+    imbalance_threshold = 0.4  # e.g., if minority class is less than 40% of majority
+
     class_counts = y_train.value_counts(normalize=True)
+    # Calculate the ratio of the minority class
     logging.info(f"Class distribution before resampling:\n{class_counts}")
     minority_ratio = class_counts.min()
 
     if minority_ratio < imbalance_threshold:
         logging.info("Class imbalance detected. Applying SMOTENC resampling.")
-        sm = SMOTENC(categorical_features=categorical_feature_names, random_state=42, sampling_strategy=0.4)
+        categorical_features = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
+        sm = SMOTENC(categorical_features=categorical_features, random_state=42, sampling_strategy=0.4)
         X_train, y_train = sm.fit_resample(X_train, y_train)
         logging.info("Resampling completed using SMOTENC.")
     else:
@@ -59,28 +62,29 @@ def main():
 
     # Configure connection to the MLflow Tracking Server
     mlflow.set_tracking_uri("http://mlflow_server:5001")
+
+    # Set the experiment name in the MLflow UI
     mlflow.set_experiment("fraud_detection_experiment")
 
-    with mlflow.start_run(run_name="fraud_detection_xgboost_training") as run:
+    # Start an MLflow run
+    # Ini buat inisiasi run baru dalam sebuah eksperimen
+    with mlflow.start_run(run_name="fraud_detection_model_training") as run:
         run_id = run.info.run_id
         logging.info(f"MLflow run started. Run ID: {run_id}")
 
-        # --- PENYESUAIAN PENTING ---
-        # Define parameter grid for XGBClassifier
-        param_grid = {
-            'model__n_estimators': [100, 200],
-            'model__max_depth': [3, 5],
-            'model__learning_rate': [0.01, 0.1]
+        # Define parameter grid for LightGBMClassifier
+        param_grid = {'model__n_estimators': [50, 100, 250, 500]
+            , 'model__min_samples_leaf': [1, 2, 5]
+            , 'model__min_samples_split': [10, 25, 50, 100]
         }
-        
-        # Use XGBClassifier as the base model
-        base_model = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss')
+
+        base_model = RandomForestClassifier(random_state=42)
 
         # Define the preprocessing pipeline
         preprocessor = ColumnTransformer(
-            [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_feature_indices)],
+            [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_features)],
             remainder='passthrough'
-        )
+        ) #OneHotEncoder is used to handle categorical features
 
         # Create the full pipeline
         pipeline = Pipeline([
@@ -91,14 +95,16 @@ def main():
         # Hyperparameter tuning with GridSearchCV
         skf = StratifiedKFold(n_splits=5, shuffle=False)
         grid_search = GridSearchCV(
-            pipeline, param_grid, cv=skf, scoring="recall"
+            pipeline, param_grid
+            , cv=skf, scoring="recall"
         )
         grid_search.fit(X_train, y_train)
+        # Hyperparameter tuning complete
         logging.info("Hyperparameter tuning complete.")
 
-        # Log best parameters for the model
+        # Show best parameters for the model
         best_params = grid_search.best_params_
-        mlflow.log_params(best_params)
+        mlflow.log_params(grid_search.best_params_)
         logging.info(f"Logged parameters: {best_params}")
 
         # Train the model with the best parameters
@@ -111,21 +117,26 @@ def main():
         y_pred = model.predict(X_test)
 
         # Log the metrics
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='weighted')
+        recall = recall_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average='weighted')
         metrics = {
-            "accuracy": accuracy_score(y_test, y_pred),
-            "precision": precision_score(y_test, y_pred, average='weighted'),
-            "recall": recall_score(y_test, y_pred, average='weighted'),
-            "f1_score": f1_score(y_test, y_pred, average='weighted')
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1
         }
         mlflow.log_metrics(metrics)
         logging.info(f"Logged metrics: {metrics}")
         
-        # Infer the model signature
+        #automatically determine the input and output schema
         signature = mlflow.models.infer_signature(X_train, model.predict(X_train))
         
         logging.info("Logging model to MLflow Registry...")
         mlflow.sklearn.log_model(
             sk_model=model,
+            params=grid_search.best_params_,
             artifact_path="model",
             signature=signature,
             registered_model_name="fraud-detection-model"
