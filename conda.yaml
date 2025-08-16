@@ -12,3 +12,4 @@ dependencies:
     - seaborn
     - imbalanced-learn
     - boto3
+    - lightgbm
