@@ -42,19 +42,21 @@ pipeline {
                 sh 'docker compose run --rm model_trainer'
             }
         }
+
+        // --- STAGE TAMBAHAN DI SINI ---
+        // Tahap ini akan berjalan setelah training berhasil.
+        stage('Refresh API Services') {
+            steps {
+                echo "Building the FastAPI image to apply any code changes..."
+                sh 'docker compose build fastapi_app'
+
+                echo "Restarting the FastAPI container to load the new model..."
+                sh 'docker compose restart fastapi_app'
+            }
+        }
     }
 
     post {
-        // --- PERBAIKAN PENTING DI SINI ---
-        // Bagian ini akan dijalankan HANYA jika semua tahap di atas berhasil.
-        // Menghapus blok 'steps' yang tidak perlu.
-        success {
-            echo 'Training successful. Triggering model refresh on the API...'
-            // Menjalankan perintah curl dari dalam kontainer sementara yang terhubung
-            // ke jaringan yang sama dengan aplikasi Anda.
-            sh 'docker run --rm --network=capstone-project_mlops_network curlimages/curl:latest -X POST http://fastapi_app:8000/refresh-model'
-        }
-        
         always {
             echo 'Pipeline retraining selesai.'
         }
