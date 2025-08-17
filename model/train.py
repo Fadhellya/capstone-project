@@ -2,123 +2,146 @@ import logging
 import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTENC
-import tensorflow as tf
-from tensorflow import keras
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.ensemble import RandomForestClassifier 
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from scikeras.wrappers import KerasClassifier
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-def create_keras_model(meta):
-    """
-    Mendefinisikan dan meng-compile neural network Keras sederhana.
-    Argumen meta dibutuhkan oleh wrapper scikeras.
-    """
-    n_features_in_ = meta["n_features_in_"]
-    model = keras.Sequential([
-        keras.layers.Input(shape=(n_features_in_,)),
-        keras.layers.Dense(64, activation='relu'),
-        keras.layers.Dropout(0.3),
-        keras.layers.Dense(32, activation='relu'),
-        keras.layers.Dropout(0.3),
-        keras.layers.Dense(1, activation='sigmoid')
-    ])
-    
-    model.compile(optimizer='adam',
-                  loss='binary_crossentropy',
-                  metrics=['accuracy'])
-    return model
-
 def main():
-    """Fungsi utama untuk melatih, mengevaluasi, dan mencatat model."""
-    logging.info("Memulai proses training...")
+    """Main function to train, evaluate, and log the model."""
+    logging.info("Starting the training process...")
 
+    # --- IMPORTANT ADJUSTMENT ---
+    # This path is RELATIVE within the container,
+    # because our working directory is /app and the data is mounted to /app/data.
     data_path = "fraud_detection.csv"
+
+    # Load the dataset
     try:
         data = pd.read_csv(data_path)
     except FileNotFoundError:
-        print(f"FATAL ERROR: File data tidak ditemukan di '{data_path}'.")
-        exit(1)
+        print(f"FATAL ERROR: Data file not found at '{data_path}'.")
+        print("Please ensure the volume mount in docker-compose.yaml is correct.")
+        exit(1) # Keluar dari skrip jika data tidak ditemukan
 
+    # Split the data
     X = data.drop(columns=['label','transaction_id'])
     y = data['label']
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
-    logging.info("Dataset berhasil dimuat dan dibagi.")
+    logging.info("Dataset loaded and split successfully.")
 
-    categorical_features = [col for col in X_train.columns if X_train[col].dtype == 'object']
-    numerical_features = [col for col in X_train.columns if X_train[col].dtype != 'object']
+    # Identify categorical features
+    categorical_features = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
 
-    if y_train.value_counts(normalize=True).min() < 0.4:
-        logging.info("Menerapkan resampling SMOTENC.")
+    # Check for class imbalance and resample if needed
+    imbalance_threshold = 0.4  # e.g., if minority class is less than 40% of majority
+
+    class_counts = y_train.value_counts(normalize=True)
+    # Calculate the ratio of the minority class
+    logging.info(f"Class distribution before resampling:\n{class_counts}")
+    minority_ratio = class_counts.min()
+
+    if minority_ratio < imbalance_threshold:
+        logging.info("Class imbalance detected. Applying SMOTENC resampling.")
+        categorical_features = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
         sm = SMOTENC(categorical_features=categorical_features, random_state=42, sampling_strategy=0.4)
         X_train, y_train = sm.fit_resample(X_train, y_train)
+        logging.info("Resampling completed using SMOTENC.")
+    else:
+        logging.info("No significant class imbalance detected. Proceeding without resampling.")
 
-    # Definisikan pipeline pra-pemrosesan
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', StandardScaler(), numerical_features),
-            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
-        ])
-    
+    # Configure connection to the MLflow Tracking Server
     mlflow.set_tracking_uri("http://mlflow_server:5001")
+
+    # Set the experiment name in the MLflow UI
     mlflow.set_experiment("fraud_detection_experiment")
 
-    with mlflow.start_run(run_name="fraud_detection_keras_pipeline_training") as run:
-        logging.info(f"MLflow run dimulai. Run ID: {run.info.run_id}")
+    # Start an MLflow run
+    # Ini buat inisiasi run baru dalam sebuah eksperimen
+    with mlflow.start_run(run_name="fraud_detection_model_training") as run:
+        run_id = run.info.run_id
+        logging.info(f"MLflow run started. Run ID: {run_id}")
 
-        # Bungkus model Keras agar bisa digunakan di dalam Pipeline Scikit-learn
-        keras_estimator = KerasClassifier(
-            model=create_keras_model,
-            epochs=20,
-            batch_size=32,
-            verbose=0
-        )
+        # Define parameter grid for LightGBMClassifier
+        param_grid = {'model__n_estimators': [50, 100, 250, 500]
+            , 'model__min_samples_leaf': [1, 2, 5]
+            , 'model__min_samples_split': [10, 25, 50, 100]
+        }
 
-        # Buat pipeline Scikit-learn yang lengkap
-        pipeline = Pipeline(steps=[
+        base_model = RandomForestClassifier(random_state=42)
+
+        # Define the preprocessing pipeline
+        preprocessor = ColumnTransformer(
+            [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_features)],
+            remainder='passthrough'
+        ) #OneHotEncoder is used to handle categorical features
+
+        # Create the full pipeline
+        pipeline = Pipeline([
             ('preprocessor', preprocessor),
-            ('classifier', keras_estimator)
+            ('model', base_model)
         ])
 
-        # --- PENYESUAIAN PENTING ---
-        # Latih seluruh pipeline dari awal hingga akhir.
-        # Scikit-learn akan secara otomatis menangani pra-pemrosesan
-        # sebelum melatih model Keras.
-        logging.info("Melatih pipeline Keras...")
-        pipeline.fit(X_train, y_train)
-        logging.info("Pelatihan model selesai.")
+        # Hyperparameter tuning with GridSearchCV
+        skf = StratifiedKFold(n_splits=5, shuffle=False)
+        grid_search = GridSearchCV(
+            pipeline, param_grid
+            , cv=skf, scoring="recall"
+        )
+        grid_search.fit(X_train, y_train)
+        # Hyperparameter tuning complete
+        logging.info("Hyperparameter tuning complete.")
 
-        # Evaluasi model
-        y_pred = pipeline.predict(X_test)
+        # Show best parameters for the model
+        best_params = grid_search.best_params_
+        mlflow.log_params(grid_search.best_params_)
+        logging.info(f"Logged parameters: {best_params}")
 
+        # Train the model with the best parameters
+        model = grid_search.best_estimator_
+        logging.info("Training the model with the best parameters...")
+        model.fit(X_train, y_train)
+        logging.info("Model training complete.")
+
+        # Make predictions and evaluate
+        y_pred = model.predict(X_test)
+
+        # Log the metrics
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='weighted')
+        recall = recall_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average='weighted')
         metrics = {
-            "accuracy": accuracy_score(y_test, y_pred),
-            "precision": precision_score(y_test, y_pred),
-            "recall": recall_score(y_test, y_pred),
-            "f1_score": f1_score(y_test, y_pred)
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1
         }
         mlflow.log_metrics(metrics)
-        logging.info(f"Metrik akhir yang dicatat: {metrics}")
+        logging.info(f"Logged metrics: {metrics}")
         
-        # Dapatkan signature dan catat seluruh pipeline ke registry
-        signature = mlflow.models.infer_signature(X_train, pipeline.predict(X_train))
-        logging.info("Mencatat pipeline model ke MLflow Registry...")
+        #automatically determine the input and output schema
+        signature = mlflow.models.infer_signature(X_train, model.predict(X_train))
+        
+        logging.info("Logging model to MLflow Registry...")
         mlflow.sklearn.log_model(
-            sk_model=pipeline,
+            sk_model=model,
+            params=grid_search.best_params_,
             artifact_path="model",
             signature=signature,
             registered_model_name="fraud-detection-model"
         )
-        logging.info("Model berhasil dilatih dan didaftarkan.")
+        logging.info("Model trained and registered successfully.")
 
 if __name__ == "__main__":
     main()
