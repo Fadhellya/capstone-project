@@ -14,3 +14,4 @@ dependencies:
     - boto3
     - lightgbm
     - xgboost
+    - tensorflow
