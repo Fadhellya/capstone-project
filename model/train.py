@@ -7,23 +7,29 @@ import tensorflow as tf
 from tensorflow import keras
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from scikeras.wrappers import KerasClassifier
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-def create_keras_model(input_shape):
-    """Defines and compiles a simple Keras neural network."""
+def create_keras_model(meta):
+    """
+    Defines and compiles a simple Keras neural network.
+    The meta argument is required by the scikeras wrapper.
+    """
+    n_features_in_ = meta["n_features_in_"]
     model = keras.Sequential([
-        keras.layers.Input(shape=(input_shape,)),
+        keras.layers.Input(shape=(n_features_in_,)),
         keras.layers.Dense(64, activation='relu'),
         keras.layers.Dropout(0.3),
         keras.layers.Dense(32, activation='relu'),
         keras.layers.Dropout(0.3),
-        keras.layers.Dense(1, activation='sigmoid') # Sigmoid for binary classification
+        keras.layers.Dense(1, activation='sigmoid')
     ])
     
     model.compile(optimizer='adam',
@@ -36,15 +42,12 @@ def main():
     logging.info("Starting the training process...")
 
     data_path = "fraud_detection.csv"
-
-    # Load the dataset
     try:
         data = pd.read_csv(data_path)
     except FileNotFoundError:
         print(f"FATAL ERROR: Data file not found at '{data_path}'.")
         exit(1)
 
-    # Split the data
     X = data.drop(columns=['label','transaction_id'])
     y = data['label']
     X_train, X_test, y_train, y_test = train_test_split(
@@ -52,16 +55,13 @@ def main():
     )
     logging.info("Dataset loaded and split successfully.")
 
-    # Identify categorical and numerical features by name
     categorical_features = [col for col in X_train.columns if X_train[col].dtype == 'object']
     numerical_features = [col for col in X_train.columns if X_train[col].dtype != 'object']
 
-    # Apply SMOTENC if needed
     if y_train.value_counts(normalize=True).min() < 0.4:
-        logging.info("Class imbalance detected. Applying SMOTENC resampling.")
+        logging.info("Applying SMOTENC resampling.")
         sm = SMOTENC(categorical_features=categorical_features, random_state=42, sampling_strategy=0.4)
         X_train, y_train = sm.fit_resample(X_train, y_train)
-        logging.info("Resampling completed.")
 
     # --- PENYESUAIAN PENTING for Keras ---
     # Define the preprocessing pipeline
@@ -71,39 +71,33 @@ def main():
             ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ])
 
-    # Fit the preprocessor on training data and transform both sets
-    X_train_processed = preprocessor.fit_transform(X_train)
-    X_test_processed = preprocessor.transform(X_test)
-    
-    # Configure MLflow
     mlflow.set_tracking_uri("http://mlflow_server:5001")
     mlflow.set_experiment("fraud_detection_experiment")
 
-    # Enable MLflow autologging for Keras
-    mlflow.keras.autolog()
-
-    with mlflow.start_run(run_name="fraud_detection_keras_training") as run:
+    with mlflow.start_run(run_name="fraud_detection_keras_pipeline_training") as run:
         logging.info(f"MLflow run started. Run ID: {run.info.run_id}")
 
-        # Create and train the Keras model
-        model = create_keras_model(X_train_processed.shape[1])
-        
-        logging.info("Training the Keras model...")
-        model.fit(
-            X_train_processed, 
-            y_train,
+        # Wrap the Keras model so it can be used in a Scikit-learn Pipeline
+        keras_estimator = KerasClassifier(
+            model=create_keras_model,
             epochs=20,
             batch_size=32,
-            validation_split=0.2,
-            verbose=2
+            verbose=0
         )
+
+        # Create the full Scikit-learn pipeline
+        pipeline = Pipeline(steps=[
+            ('preprocessor', preprocessor),
+            ('classifier', keras_estimator)
+        ])
+
+        logging.info("Training the Keras pipeline...")
+        pipeline.fit(X_train, y_train)
         logging.info("Model training complete.")
 
         # Evaluate the model
-        y_pred_proba = model.predict(X_test_processed)
-        y_pred = (y_pred_proba > 0.5).astype(int) # Convert probabilities to 0 or 1
+        y_pred = pipeline.predict(X_test)
 
-        # Log metrics manually (autolog might miss some)
         metrics = {
             "accuracy": accuracy_score(y_test, y_pred),
             "precision": precision_score(y_test, y_pred),
@@ -113,11 +107,11 @@ def main():
         mlflow.log_metrics(metrics)
         logging.info(f"Logged final metrics: {metrics}")
         
-        # Infer signature and log the model to the registry
-        signature = mlflow.models.infer_signature(X_test_processed, y_pred)
-        logging.info("Logging model to MLflow Registry...")
-        mlflow.keras.log_model(
-            model,
+        # Infer signature and log the entire pipeline to the registry
+        signature = mlflow.models.infer_signature(X_train, pipeline.predict(X_train))
+        logging.info("Logging model pipeline to MLflow Registry...")
+        mlflow.sklearn.log_model(
+            sk_model=pipeline,
             artifact_path="model",
             signature=signature,
             registered_model_name="fraud-detection-model"
