@@ -1,12 +1,12 @@
 import logging
 import mlflow
 import pandas as pd
+import numpy as np
 from imblearn.over_sampling import SMOTENC
-from sklearn.ensemble import RandomForestClassifier 
-from sklearn.preprocessing import OneHotEncoder
+import tensorflow as tf
+from tensorflow import keras
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
@@ -15,22 +15,34 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+def create_keras_model(input_shape):
+    """Defines and compiles a simple Keras neural network."""
+    model = keras.Sequential([
+        keras.layers.Input(shape=(input_shape,)),
+        keras.layers.Dense(64, activation='relu'),
+        keras.layers.Dropout(0.3),
+        keras.layers.Dense(32, activation='relu'),
+        keras.layers.Dropout(0.3),
+        keras.layers.Dense(1, activation='sigmoid') # Sigmoid for binary classification
+    ])
+    
+    model.compile(optimizer='adam',
+                  loss='binary_crossentropy',
+                  metrics=['accuracy'])
+    return model
+
 def main():
     """Main function to train, evaluate, and log the model."""
     logging.info("Starting the training process...")
 
-    # --- IMPORTANT ADJUSTMENT ---
-    # This path is RELATIVE within the container,
-    # because our working directory is /app and the data is mounted to /app/data.
-    data_path = "fraud_detection.csv"
+    data_path = "data/fraud_detection.csv"
 
     # Load the dataset
     try:
         data = pd.read_csv(data_path)
     except FileNotFoundError:
         print(f"FATAL ERROR: Data file not found at '{data_path}'.")
-        print("Please ensure the volume mount in docker-compose.yaml is correct.")
-        exit(1) # Keluar dari skrip jika data tidak ditemukan
+        exit(1)
 
     # Split the data
     X = data.drop(columns=['label','transaction_id'])
@@ -40,103 +52,72 @@ def main():
     )
     logging.info("Dataset loaded and split successfully.")
 
-    # Identify categorical features
-    categorical_features = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
+    # Identify categorical and numerical features by name
+    categorical_features = [col for col in X_train.columns if X_train[col].dtype == 'object']
+    numerical_features = [col for col in X_train.columns if X_train[col].dtype != 'object']
 
-    # Check for class imbalance and resample if needed
-    imbalance_threshold = 0.4  # e.g., if minority class is less than 40% of majority
-
-    class_counts = y_train.value_counts(normalize=True)
-    # Calculate the ratio of the minority class
-    logging.info(f"Class distribution before resampling:\n{class_counts}")
-    minority_ratio = class_counts.min()
-
-    if minority_ratio < imbalance_threshold:
+    # Apply SMOTENC if needed
+    if y_train.value_counts(normalize=True).min() < 0.4:
         logging.info("Class imbalance detected. Applying SMOTENC resampling.")
-        categorical_features = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype == 'object']
         sm = SMOTENC(categorical_features=categorical_features, random_state=42, sampling_strategy=0.4)
         X_train, y_train = sm.fit_resample(X_train, y_train)
-        logging.info("Resampling completed using SMOTENC.")
-    else:
-        logging.info("No significant class imbalance detected. Proceeding without resampling.")
+        logging.info("Resampling completed.")
 
-    # Configure connection to the MLflow Tracking Server
-    mlflow.set_tracking_uri("http://mlflow_server:5001")
-
-    # Set the experiment name in the MLflow UI
-    mlflow.set_experiment("fraud_detection_experiment")
-
-    # Start an MLflow run
-    # Ini buat inisiasi run baru dalam sebuah eksperimen
-    with mlflow.start_run(run_name="fraud_detection_model_training") as run:
-        run_id = run.info.run_id
-        logging.info(f"MLflow run started. Run ID: {run_id}")
-
-        # Define parameter grid for LightGBMClassifier
-        param_grid = {'model__n_estimators': [50, 100, 250, 500]
-            , 'model__min_samples_leaf': [1, 2, 5]
-            , 'model__min_samples_split': [10, 25, 50, 100]
-        }
-
-        base_model = RandomForestClassifier(random_state=42)
-
-        # Define the preprocessing pipeline
-        preprocessor = ColumnTransformer(
-            [('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_features)],
-            remainder='passthrough'
-        ) #OneHotEncoder is used to handle categorical features
-
-        # Create the full pipeline
-        pipeline = Pipeline([
-            ('preprocessor', preprocessor),
-            ('model', base_model)
+    # --- PENYESUAIAN PENTING for Keras ---
+    # Define the preprocessing pipeline
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', StandardScaler(), numerical_features),
+            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ])
 
-        # Hyperparameter tuning with GridSearchCV
-        skf = StratifiedKFold(n_splits=5, shuffle=False)
-        grid_search = GridSearchCV(
-            pipeline, param_grid
-            , cv=skf, scoring="recall"
+    # Fit the preprocessor on training data and transform both sets
+    X_train_processed = preprocessor.fit_transform(X_train)
+    X_test_processed = preprocessor.transform(X_test)
+    
+    # Configure MLflow
+    mlflow.set_tracking_uri("http://mlflow_server:5001")
+    mlflow.set_experiment("fraud_detection_experiment")
+
+    # Enable MLflow autologging for Keras
+    mlflow.keras.autolog()
+
+    with mlflow.start_run(run_name="fraud_detection_keras_training") as run:
+        logging.info(f"MLflow run started. Run ID: {run.info.run_id}")
+
+        # Create and train the Keras model
+        model = create_keras_model(X_train_processed.shape[1])
+        
+        logging.info("Training the Keras model...")
+        model.fit(
+            X_train_processed, 
+            y_train,
+            epochs=20,
+            batch_size=32,
+            validation_split=0.2,
+            verbose=2
         )
-        grid_search.fit(X_train, y_train)
-        # Hyperparameter tuning complete
-        logging.info("Hyperparameter tuning complete.")
-
-        # Show best parameters for the model
-        best_params = grid_search.best_params_
-        mlflow.log_params(grid_search.best_params_)
-        logging.info(f"Logged parameters: {best_params}")
-
-        # Train the model with the best parameters
-        model = grid_search.best_estimator_
-        logging.info("Training the model with the best parameters...")
-        model.fit(X_train, y_train)
         logging.info("Model training complete.")
 
-        # Make predictions and evaluate
-        y_pred = model.predict(X_test)
+        # Evaluate the model
+        y_pred_proba = model.predict(X_test_processed)
+        y_pred = (y_pred_proba > 0.5).astype(int) # Convert probabilities to 0 or 1
 
-        # Log the metrics
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='weighted')
-        recall = recall_score(y_test, y_pred, average='weighted')
-        f1 = f1_score(y_test, y_pred, average='weighted')
+        # Log metrics manually (autolog might miss some)
         metrics = {
-            "accuracy": accuracy,
-            "precision": precision,
-            "recall": recall,
-            "f1_score": f1
+            "accuracy": accuracy_score(y_test, y_pred),
+            "precision": precision_score(y_test, y_pred),
+            "recall": recall_score(y_test, y_pred),
+            "f1_score": f1_score(y_test, y_pred)
         }
         mlflow.log_metrics(metrics)
-        logging.info(f"Logged metrics: {metrics}")
+        logging.info(f"Logged final metrics: {metrics}")
         
-        #automatically determine the input and output schema
-        signature = mlflow.models.infer_signature(X_train, model.predict(X_train))
-        
+        # Infer signature and log the model to the registry
+        signature = mlflow.models.infer_signature(X_test_processed, y_pred)
         logging.info("Logging model to MLflow Registry...")
-        mlflow.sklearn.log_model(
-            sk_model=model,
-            params=grid_search.best_params_,
+        mlflow.keras.log_model(
+            model,
             artifact_path="model",
             signature=signature,
             registered_model_name="fraud-detection-model"
