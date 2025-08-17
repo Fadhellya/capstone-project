@@ -40,7 +40,7 @@ def main():
     """Fungsi utama untuk melatih, mengevaluasi, dan mencatat model."""
     logging.info("Memulai proses training...")
 
-    data_path = "data/fraud_detection.csv"
+    data_path = "fraud_detection.csv"
     try:
         data = pd.read_csv(data_path)
     except FileNotFoundError:
