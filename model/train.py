@@ -18,10 +18,7 @@ logging.basicConfig(
 )
 
 def create_keras_model(meta):
-    """
-    Defines and compiles a simple Keras neural network.
-    The meta argument is required by the scikeras wrapper.
-    """
+    """Defines and compiles a simple Keras neural network."""
     n_features_in_ = meta["n_features_in_"]
     model = keras.Sequential([
         keras.layers.Input(shape=(n_features_in_,)),
@@ -63,40 +60,40 @@ def main():
         sm = SMOTENC(categorical_features=categorical_features, random_state=42, sampling_strategy=0.4)
         X_train, y_train = sm.fit_resample(X_train, y_train)
 
-    # --- PENYESUAIAN PENTING for Keras ---
-    # Define the preprocessing pipeline
+    # Define and fit the preprocessor
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), numerical_features),
             ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ])
-
+    
+    X_train_processed = preprocessor.fit_transform(X_train)
+    X_test_processed = preprocessor.transform(X_test)
+    
     mlflow.set_tracking_uri("http://mlflow_server:5001")
     mlflow.set_experiment("fraud_detection_experiment")
 
-    with mlflow.start_run(run_name="fraud_detection_keras_pipeline_training") as run:
+    with mlflow.start_run(run_name="fraud_detection_keras_training") as run:
         logging.info(f"MLflow run started. Run ID: {run.info.run_id}")
 
-        # Wrap the Keras model so it can be used in a Scikit-learn Pipeline
-        keras_estimator = KerasClassifier(
-            model=create_keras_model,
+        # --- PENYESUAIAN PENTING ---
+        # Create and train the Keras model directly on processed data
+        keras_model = create_keras_model(meta={"n_features_in_": X_train_processed.shape[1]})
+        
+        logging.info("Training the Keras model...")
+        keras_model.fit(
+            X_train_processed, 
+            y_train,
             epochs=20,
             batch_size=32,
+            validation_split=0.2,
             verbose=0
         )
-
-        # Create the full Scikit-learn pipeline
-        pipeline = Pipeline(steps=[
-            ('preprocessor', preprocessor),
-            ('classifier', keras_estimator)
-        ])
-
-        logging.info("Training the Keras pipeline...")
-        pipeline.fit(X_train, y_train)
         logging.info("Model training complete.")
 
         # Evaluate the model
-        y_pred = pipeline.predict(X_test)
+        y_pred_proba = keras_model.predict(X_test_processed)
+        y_pred = (y_pred_proba > 0.5).astype(int)
 
         metrics = {
             "accuracy": accuracy_score(y_test, y_pred),
@@ -107,11 +104,26 @@ def main():
         mlflow.log_metrics(metrics)
         logging.info(f"Logged final metrics: {metrics}")
         
-        # Infer signature and log the entire pipeline to the registry
-        signature = mlflow.models.infer_signature(X_train, pipeline.predict(X_train))
+        # --- PENYESUAIAN PENTING ---
+        # For logging, create the final deployable pipeline by combining
+        # the FITTED preprocessor and the FITTED Keras model.
+        
+        # Wrap the FITTED Keras model in the Scikit-learn compatible wrapper
+        keras_estimator = KerasClassifier(model=keras_model, loss="binary_crossentropy")
+        # Manually mark it as fitted to avoid issues
+        keras_estimator.fit_ = True 
+
+        # Create the final pipeline object
+        final_pipeline = Pipeline(steps=[
+            ('preprocessor', preprocessor),
+            ('classifier', keras_estimator)
+        ])
+        
+        # Infer signature and log the entire pipeline
+        signature = mlflow.models.infer_signature(X_train, final_pipeline.predict(X_train))
         logging.info("Logging model pipeline to MLflow Registry...")
         mlflow.sklearn.log_model(
-            sk_model=pipeline,
+            sk_model=final_pipeline,
             artifact_path="model",
             signature=signature,
             registered_model_name="fraud-detection-model"
